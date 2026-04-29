@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XStellar: Swarm — Castle Defense</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0806; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; }
+  canvas { display: block; cursor: crosshair; }
+</style>
+</head>
+<body>
+<script>
+// ============================================================
+//  XSTELLAR: SWARM — CASTLE DEFENSE  v5
+//  Medieval Galaga × RPG × Survival
+//  Humans vs. Bugs — Defend the Keep
+//  Mouse-aimed combat, class specialization, specials
+// ============================================================
+
+const W = 480, H = 720;
+
+const PAL = {
+  stone: 0x8b8378, stoneDark: 0x5c564e, stoneLight: 0xa89f94,
+  wood: 0x8b6914, woodDark: 0x5c4510,
+  grass: 0x3a5a20, grassDark: 0x2d4518, grassLight: 0x4a7a2e,
+  dirt: 0x6b5334, dirtDark: 0x4a3a25,
+  sky: 0x1a1a2e, blood: 0x8b1a1a, fire: 0xe8841a, torch: 0xffcc44,
+  gold: 0xd4a017, parchment: 0xd4c5a0,
+  text: '#d4c5a0', textDim: '#8b8378', textBright: '#ffe8a0', accent: '#d4a017'
+};
+
+// ── RPG CLASSES (starting identity + base stats) ────────────
+const CLASSES = {
+  ranger:  { name: 'Ranger',  desc: 'Swift bow. Rains arrows like a storm.',       color: 0x6b8e23, accent: '#8fbc3a', base: { fort: 6, might: 4, agil: 5, haste: 6, armor: 1 } },
+  knight:  { name: 'Knight',  desc: 'Iron will. The wall behind the wall.',         color: 0x7089a8, accent: '#8ca8cc', base: { fort: 12, might: 3, agil: 3, haste: 2, armor: 5 } },
+  mage:    { name: 'Mage',    desc: 'Arcane bolts. Fragile but devastating.',       color: 0x7b4faa, accent: '#a06fdd', base: { fort: 5, might: 6, agil: 4, haste: 4, armor: 2 } },
+  cleric:  { name: 'Cleric',  desc: 'Holy light. Balanced, blessed, unyielding.',   color: 0xc9a84c, accent: '#e8c95a', base: { fort: 9, might: 3, agil: 4, haste: 3, armor: 5 } }
+};
+
+const STAT_INFO = {
+  fort:  { name: 'Fortitude', desc: '+5 Max HP' },
+  might: { name: 'Might',     desc: '+1 Damage' },
+  agil:  { name: 'Agility',   desc: '+15 Move speed' },
+  haste: { name: 'Haste',     desc: '-30ms attack delay' },
+  armor: { name: 'Armor',     desc: '+2% dmg reduction' }
+};
+
+// ── CLASS SPECIALIZATIONS ───────────────────────────────────
+// Each level in a spec strengthens that class's special ability.
+// Level 1 = unlock the special. Level 2+ = strengthen.
+const CLASS_SPECS = {
+  ranger: {
+    name: 'Ranger Mastery', special: 'Volley',
+    desc: 'Rain arrows in a wide cone',
+    color: 0x6b8e23, accent: '#8fbc3a',
+    levels: [
+      { arrows: 3, spread: 0.4, dmgMult: 0.8, cd: 5000 },
+      { arrows: 5, spread: 0.5, dmgMult: 0.9, cd: 4500 },
+      { arrows: 7, spread: 0.6, dmgMult: 1.0, cd: 4000 },
+      { arrows: 9, spread: 0.7, dmgMult: 1.1, cd: 3500 },
+      { arrows: 11,spread: 0.8, dmgMult: 1.2, cd: 3000 },
+    ]
+  },
+  knight: {
+    name: 'Knight Mastery', special: 'Shield Wall',
+    desc: 'Become invulnerable briefly',
+    color: 0x7089a8, accent: '#8ca8cc',
+    levels: [
+      { dur: 1500, cd: 8000 },
+      { dur: 2000, cd: 7000 },
+      { dur: 2500, cd: 6500 },
+      { dur: 3000, cd: 6000 },
+      { dur: 3500, cd: 5500 },
+    ]
+  },
+  mage: {
+    name: 'Mage Mastery', special: 'Arcane Nova',
+    desc: 'Blast all enemies in range',
+    color: 0x7b4faa, accent: '#a06fdd',
+    levels: [
+      { dmg: 5,  radius: 90,  cd: 6000 },
+      { dmg: 8,  radius: 120, cd: 5500 },
+      { dmg: 12, radius: 150, cd: 5000 },
+      { dmg: 16, radius: 180, cd: 4500 },
+      { dmg: 20, radius: 210, cd: 4000 },
+    ]
+  },
+  cleric: {
+    name: 'Cleric Mastery', special: 'Divine Mend',
+    desc: 'Restore health instantly',
+    color: 0xc9a84c, accent: '#e8c95a',
+    levels: [
+      { healPct: 0.20, cd: 10000 },
+      { healPct: 0.30, cd: 9000 },
+      { healPct: 0.40, cd: 8000 },
+      { healPct: 0.50, cd: 7000 },
+      { healPct: 0.60, cd: 6000 },
+    ]
+  }
+};
+
+function xpForLevel(lv) { return lv * 80 + 20; }
+
+// ── PLAYER STATE ────────────────────────────────────────────
+let PLAYER = null;
+
+const SaveManager = {
+  KEY: 'xstellar_swarm_v5',
+  hasSave() { try { return localStorage.getItem(this.KEY) !== null; } catch { return false; } },
+  save() {
+    if (!PLAYER) return;
+    try { localStorage.setItem(this.KEY, JSON.stringify({
+      v: 2, classKey: PLAYER.classKey, level: PLAYER.level, xp: PLAYER.xp,
+      statPoints: PLAYER.statPoints, stats: PLAYER.stats,
+      classSpecs: PLAYER.classSpecs, activeSpecial: PLAYER.activeSpecial,
+      totalKills: PLAYER.totalKills, highestWave: PLAYER.highestWave,
+      runs: PLAYER.runs, savedAt: Date.now()
+    })); } catch(e) { console.warn('Save failed:', e); }
+  },
+  load() { try { const r = localStorage.getItem(this.KEY); return r ? JSON.parse(r) : null; } catch { return null; } },
+  clear() { try { localStorage.removeItem(this.KEY); } catch {} }
+};
+
+function createPlayer(classKey) {
+  const c = CLASSES[classKey];
+  PLAYER = {
+    classKey, className: c.name, color: c.color,
+    level: 1, xp: 0, statPoints: 0,
+    stats: { ...c.base },
+    classSpecs: { ranger: 0, knight: 0, mage: 0, cleric: 0 },
+    activeSpecial: null,
+    totalKills: 0, wavesCleared: 0, highestWave: 0, runs: 0
+  };
+  SaveManager.save();
+}
+
+function loadPlayer() {
+  const d = SaveManager.load();
+  if (!d || !CLASSES[d.classKey]) return false;
+  const c = CLASSES[d.classKey];
+  PLAYER = {
+    classKey: d.classKey, className: c.name, color: c.color,
+    level: d.level || 1, xp: d.xp || 0, statPoints: d.statPoints || 0,
+    stats: d.stats || { ...c.base },
+    classSpecs: d.classSpecs || { ranger: 0, knight: 0, mage: 0, cleric: 0 },
+    activeSpecial: d.activeSpecial || null,
+    totalKills: d.totalKills || 0, wavesCleared: 0,
+    highestWave: d.highestWave || 0, runs: d.runs || 0
+  };
+  return true;
+}
+
+function getMaxHP()     { return PLAYER.stats.fort * 5 + 20; }
+function getDamage()    { return PLAYER.stats.might + 1; }
+function getMoveSpeed() { return 120 + PLAYER.stats.agil * 15; }
+function getFireDelay() { return Math.max(80, 400 - PLAYER.stats.haste * 30); }
+function getArmor()     { return Math.min(0.75, PLAYER.stats.armor * 0.02); }
+
+function getSpecLevel(specKey) { return PLAYER.classSpecs[specKey] || 0; }
+function getSpecData(specKey) {
+  const lv = getSpecLevel(specKey);
+  if (lv <= 0) return null;
+  const spec = CLASS_SPECS[specKey];
+  return spec.levels[Math.min(lv - 1, spec.levels.length - 1)];
+}
+function getUnlockedSpecs() {
+  return Object.keys(CLASS_SPECS).filter(k => getSpecLevel(k) > 0);
+}
+
+// ── ENVIRONMENT DRAWING ─────────────────────────────────────
+
+function drawCastleWall(scene) {
+  const g = scene.add.graphics().setDepth(0);
+  const wallY = H - 100;
+  g.fillStyle(PAL.dirt, 1); g.fillRect(0, wallY + 40, W, H - wallY);
+  g.fillStyle(PAL.stone, 1); g.fillRect(0, wallY, W, 44);
+  g.lineStyle(1, PAL.stoneDark, 0.4);
+  for (let row = 0; row < 3; row++) {
+    const ry = wallY + row * 15;
+    g.moveTo(0, ry); g.lineTo(W, ry);
+    const off = row % 2 === 0 ? 0 : 25;
+    for (let bx = off; bx < W; bx += 50) { g.moveTo(bx, ry); g.lineTo(bx, ry + 15); }
+  }
+  g.strokePath();
+  g.fillStyle(PAL.stone, 1);
+  for (let bx = 0; bx < W; bx += 40) {
+    g.fillRect(bx, wallY - 18, 22, 18);
+    g.fillStyle(PAL.stoneDark, 0.3); g.fillRect(bx + 2, wallY - 16, 18, 1); g.fillRect(bx + 2, wallY - 8, 18, 1);
+    g.fillStyle(PAL.stone, 1);
+  }
+  g.fillStyle(PAL.stoneLight, 0.3); g.fillRect(0, wallY, W, 2);
+  return wallY;
+}
+
+function drawBattlefield(scene) {
+  const g = scene.add.graphics().setDepth(-5);
+  for (let y = 0; y < 300; y++) {
+    const t = y / 300;
+    const r = Phaser.Math.Linear(0x0a, 0x1a, t), gr = Phaser.Math.Linear(0x08, 0x1a, t), b = Phaser.Math.Linear(0x12, 0x2e, t);
+    g.fillStyle((r << 16) | (gr << 8) | b, 1); g.fillRect(0, y, W, 1);
+  }
+  g.fillStyle(0x0f1a0a, 0.8);
+  for (let x = 0; x < W; x += 3) { const h = 15 + Math.sin(x*0.03)*8 + Math.sin(x*0.07)*5 + Math.random()*4; g.fillRect(x, 300 - h, 3, h); }
+  g.fillStyle(PAL.grassDark, 1); g.fillRect(0, 300, W, H - 300);
+  for (let y = 300; y < H - 110; y += 12) { g.fillStyle(Math.random()<0.5 ? PAL.grass : PAL.grassDark, 0.3); g.fillRect(0, y, W, 6); }
+  g.fillStyle(PAL.dirtDark, 0.4);
+  for (let y = 0; y < H - 100; y += 2) { const t = y/(H-100), pw = 20+t*60, cx = W/2+Math.sin(y*0.01)*15; g.fillRect(cx-pw/2, y, pw, 2); }
+}
+
+function drawTorches(scene, wallY) {
+  const torches = [];
+  [60, W/2, W-60].forEach(tx => {
+    const p = scene.add.graphics().setDepth(1); p.fillStyle(PAL.woodDark, 1); p.fillRect(tx-2, wallY-34, 4, 20);
+    torches.push({ x: tx, y: wallY-36, gfx: scene.add.graphics().setDepth(2) });
+  });
+  return torches;
+}
+
+function updateTorches(torches, time) {
+  torches.forEach(t => {
+    t.gfx.clear();
+    const f1 = Math.sin(time*0.008+t.x)*2, f2 = Math.cos(time*0.012+t.x*0.5)*1.5;
+    t.gfx.fillStyle(PAL.fire, 0.15); t.gfx.fillCircle(t.x+f2, t.y-4, 18);
+    t.gfx.fillStyle(PAL.fire, 0.8); t.gfx.fillEllipse(t.x+f1, t.y-3, 6, 10);
+    t.gfx.fillStyle(PAL.torch, 0.9); t.gfx.fillEllipse(t.x+f1*0.5, t.y-2, 3, 6);
+  });
+}
+
+function createFieldDebris(scene) {
+  const items = [];
+  for (let i = 0; i < 20; i++) {
+    const x = Phaser.Math.Between(0, W), y = Phaser.Math.Between(0, H-120);
+    const obj = scene.add.graphics().setDepth(-2);
+    const type = Math.random();
+    if (type < 0.5) { obj.fillStyle(PAL.grassLight, 0.3+Math.random()*0.2); const h = Phaser.Math.Between(3,7); obj.fillTriangle(x-2,y,x,y-h,x+2,y); }
+    else if (type < 0.8) { obj.fillStyle(PAL.stoneDark, 0.25); obj.fillCircle(x,y,Phaser.Math.Between(2,4)); }
+    else { obj.fillStyle(0xccbbaa, 0.15); obj.fillCircle(x,y,3); }
+    items.push({ obj, speed: Phaser.Math.Between(8,25), y });
+  }
+  return items;
+}
+
+function updateFieldDebris(items, delta) {
+  for (const it of items) { it.y += it.speed*delta/1000; it.obj.y += it.speed*delta/1000; if (it.y > H+10) { it.y = -10; it.obj.y -= H+20; } }
+}
+
+// ════════════════════════════════════════════════════════════
+//  TITLE SCENE
+// ════════════════════════════════════════════════════════════
+class TitleScene extends Phaser.Scene {
+  constructor() { super('TitleScene'); }
+  create() {
+    const bg = this.add.graphics().setDepth(-10);
+    for (let y = 0; y < H; y++) { const v = Math.floor(Phaser.Math.Linear(0x08,0x18,y/H)); bg.fillStyle((v<<16)|((v-2)<<8)|(v-4),1); bg.fillRect(0,y,W,1); }
+    const sil = this.add.graphics().setDepth(-5); sil.fillStyle(0x0a0a0a, 0.6);
+    sil.fillRect(80,340,40,120); sil.fillRect(W-120,320,40,140); sil.fillRect(W/2-25,300,50,160); sil.fillRect(60,420,W-120,40);
+    for (let x = 60; x < W-60; x += 30) sil.fillRect(x,405,16,15);
+
+    this.add.text(W/2,120,'XSTELLAR',{fontSize:'48px',fontFamily:'serif',color:PAL.accent,stroke:'#3e2800',strokeThickness:4}).setOrigin(0.5);
+    this.add.text(W/2,178,'— S W A R M —',{fontSize:'24px',fontFamily:'serif',color:PAL.text,stroke:'#1a1408',strokeThickness:2}).setOrigin(0.5);
+    this.add.text(W/2,230,'Defend the Keep',{fontSize:'14px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5);
+
+    const dec = this.add.graphics(); dec.lineStyle(2,PAL.gold,0.6);
+    dec.moveTo(W/2-40,260); dec.lineTo(W/2+40,290); dec.moveTo(W/2+40,260); dec.lineTo(W/2-40,290); dec.strokePath();
+    dec.fillStyle(PAL.gold,0.6); dec.fillCircle(W/2,275,4);
+
+    this.add.text(W/2,310,'Left Click: Attack  ◆  Right Click: Special\nWASD / Arrows: Move  ◆  Tab: Swap Special',{
+      fontSize:'10px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic',align:'center'
+    }).setOrigin(0.5);
+
+    if (SaveManager.hasSave()) {
+      const d = SaveManager.load(); const cls = CLASSES[d.classKey];
+      const specs = Object.entries(d.classSpecs||{}).filter(([,v])=>v>0).map(([k,v])=>`${CLASSES[k].name} ${v}`).join(', ') || 'None';
+      const cont = this.add.text(W/2,470,'— Continue —',{fontSize:'22px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5).setInteractive({useHandCursor:true});
+      this.add.text(W/2,500,`Lv ${d.level} ${cls.name}  ◆  ${d.totalKills} kills  ◆  ${d.runs||0} runs`,{fontSize:'10px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5);
+      this.add.text(W/2,516,`Specs: ${specs}`,{fontSize:'9px',fontFamily:'serif',color:'#4a4030',fontStyle:'italic'}).setOrigin(0.5);
+      cont.on('pointerover',()=>cont.setColor('#ffe8a0')); cont.on('pointerout',()=>cont.setColor(PAL.accent));
+      cont.on('pointerdown',()=>{ loadPlayer(); this.scene.start('GameScene'); });
+      this.tweens.add({targets:cont,alpha:0.5,duration:900,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
+
+      const nw = this.add.text(W/2,560,'— New Character —',{fontSize:'14px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5).setInteractive({useHandCursor:true});
+      nw.on('pointerover',()=>nw.setColor(PAL.text)); nw.on('pointerout',()=>nw.setColor(PAL.textDim));
+      nw.on('pointerdown',()=>{ SaveManager.clear(); this.scene.start('ClassSelectScene'); });
+    } else {
+      const s = this.add.text(W/2,530,'— Press Any Key —',{fontSize:'18px',fontFamily:'serif',color:PAL.text,fontStyle:'italic'}).setOrigin(0.5);
+      this.tweens.add({targets:s,alpha:0.3,duration:1000,yoyo:true,repeat:-1});
+      this.input.keyboard.on('keydown',()=>this.scene.start('ClassSelectScene'));
+      this.input.on('pointerdown',()=>this.scene.start('ClassSelectScene'));
+    }
+    this.add.text(W/2,H-30,'v5.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  CLASS SELECT SCENE
+// ════════════════════════════════════════════════════════════
+class ClassSelectScene extends Phaser.Scene {
+  constructor() { super('ClassSelectScene'); }
+  create() {
+    this.add.rectangle(W/2,H/2,W,H,0x0e0c08);
+    const b = this.add.graphics(); b.lineStyle(2,PAL.gold,0.3); b.strokeRect(15,15,W-30,H-30);
+    this.add.text(W/2,45,'Choose Thy Class',{fontSize:'24px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5);
+    const sep = this.add.graphics(); sep.lineStyle(1,PAL.gold,0.3); sep.moveTo(80,72); sep.lineTo(W-80,72); sep.strokePath();
+
+    this.add.text(W/2,680,'Your starting class determines base stats. Spec into ANY class later for abilities.',{
+      fontSize:'9px',fontFamily:'serif',color:'#4a4030',fontStyle:'italic',align:'center',wordWrap:{width:380}
+    }).setOrigin(0.5);
+
+    const keys = Object.keys(CLASSES), cardH = 130, startY = 90;
+    const statKeys = ['fort','might','agil','haste','armor'];
+    const statNames = ['FOR','MIG','AGI','HAS','ARM'];
+
+    keys.forEach((key, i) => {
+      const c = CLASSES[key], y = startY + i * (cardH + 14);
+      const bg = this.add.graphics();
+      bg.fillStyle(0x1a1610,0.9); bg.fillRoundedRect(30,y,W-60,cardH,6);
+      bg.lineStyle(1,c.color,0.4); bg.strokeRoundedRect(30,y,W-60,cardH,6);
+
+      this.drawClassIcon(70, y+40, key, c.color);
+      this.add.text(115,y+12,c.name.toUpperCase(),{fontSize:'18px',fontFamily:'serif',color:c.accent});
+      this.add.text(115,y+36,c.desc,{fontSize:'11px',fontFamily:'serif',color:PAL.textDim,wordWrap:{width:290},fontStyle:'italic'});
+      this.add.text(115,y+58,`Special: ${CLASS_SPECS[key].special} — ${CLASS_SPECS[key].desc}`,{fontSize:'9px',fontFamily:'serif',color:'#665a44',fontStyle:'italic'});
+
+      const barY = y + 80;
+      statKeys.forEach((sk,si) => {
+        const bx = 115+si*62;
+        this.add.text(bx,barY,statNames[si],{fontSize:'8px',fontFamily:'serif',color:'#665a44'});
+        this.add.graphics().fillStyle(0x2a2418,1).fillRect(bx,barY+12,50,5);
+        this.add.graphics().fillStyle(c.color,0.8).fillRect(bx,barY+12,50*(c.base[sk]/8),5);
+      });
+
+      const zone = this.add.zone(30,y,W-60,cardH).setOrigin(0,0).setInteractive({useHandCursor:true});
+      zone.on('pointerover',()=>{ bg.clear(); bg.fillStyle(0x2a2418,0.95); bg.fillRoundedRect(30,y,W-60,cardH,6); bg.lineStyle(2,c.color,0.8); bg.strokeRoundedRect(30,y,W-60,cardH,6); });
+      zone.on('pointerout',()=>{ bg.clear(); bg.fillStyle(0x1a1610,0.9); bg.fillRoundedRect(30,y,W-60,cardH,6); bg.lineStyle(1,c.color,0.4); bg.strokeRoundedRect(30,y,W-60,cardH,6); });
+      zone.on('pointerdown',()=>{ createPlayer(key); this.scene.start('GameScene'); });
+    });
+  }
+
+  drawClassIcon(x, y, key, color) {
+    const g = this.add.graphics();
+    if (key === 'ranger') { g.lineStyle(2,color,1); g.beginPath(); g.arc(x,y,16,-1.2,1.2,false); g.strokePath(); g.lineStyle(1,0xccbbaa,0.8); g.moveTo(x+14,y-14); g.lineTo(x+14,y+14); g.strokePath(); g.fillStyle(0xccbbaa,0.8); g.fillTriangle(x+20,y,x+14,y-3,x+14,y+3); }
+    else if (key === 'knight') { g.fillStyle(color,0.8); g.fillRoundedRect(x-11,y-14,22,28,4); g.lineStyle(2,0xdddddd,0.4); g.strokeRoundedRect(x-11,y-14,22,28,4); g.fillStyle(0xdddddd,0.3); g.fillCircle(x,y,5); }
+    else if (key === 'mage') { g.lineStyle(2,PAL.woodDark,1); g.moveTo(x,y-18); g.lineTo(x,y+18); g.strokePath(); g.fillStyle(color,1); g.fillCircle(x,y-18,6); g.fillStyle(0xffffff,0.3); g.fillCircle(x-2,y-20,2); }
+    else if (key === 'cleric') { g.fillStyle(color,0.9); g.fillRect(x-3,y-16,6,32); g.fillRect(x-11,y-8,22,6); g.fillStyle(0xffffff,0.2); g.fillCircle(x,y-4,4); }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  GAME SCENE
+// ════════════════════════════════════════════════════════════
+class GameScene extends Phaser.Scene {
+  constructor() { super('GameScene'); }
+
+  create() {
+    this.input.mouse.disableContextMenu();
+    drawBattlefield(this);
+    this.wallY = drawCastleWall(this);
+    this.torches = drawTorches(this, this.wallY);
+    this.debris = createFieldDebris(this);
+
+    this.wave = 0; this.waveActive = false; this.enemiesRemaining = 0;
+    this.hp = getMaxHP(); this.maxHp = getMaxHP();
+    this.kills = 0; this.combo = 0; this.comboTimer = 0;
+    this.lastFire = 0; this.invincible = 0; this.shakeTime = 0;
+    this.particles = [];
+    this.specialCooldown = 0;
+    this.shieldWallActive = 0; // remaining shield wall duration
+    this.novaEffects = [];
+
+    this.bullets = this.add.group();
+    this.enemyBullets = this.add.group();
+    this.enemies = this.add.group();
+
+    this.playerGfx = this.add.graphics().setDepth(20);
+    this.shieldGfx = this.add.graphics().setDepth(21);
+    this.shipX = W / 2;
+    this.shipY = this.wallY - 8;
+    this.aimAngle = -Math.PI / 2; // default: up
+    this.drawPlayer();
+
+    this.createHUD();
+
+    this.cursors = this.input.keyboard.createCursorKeys();
+    this.wasd = this.input.keyboard.addKeys('W,A,S,D');
+    this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    this.tabKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.TAB);
+
+    // Tab to cycle specials
+    this.tabKey.on('down', () => this.cycleSpecial());
+
+    // Right click for special
+    this.input.on('pointerdown', (pointer) => {
+      if (pointer.rightButtonDown()) this.useSpecial();
+    });
+
+    this.time.delayedCall(1200, () => this.startWave());
+  }
+
+  cycleSpecial() {
+    const unlocked = getUnlockedSpecs();
+    if (unlocked.length <= 1) return;
+    const idx = unlocked.indexOf(PLAYER.activeSpecial);
+    PLAYER.activeSpecial = unlocked[(idx + 1) % unlocked.length];
+    this.showSpecialSwap();
+    this.updateHUD();
+  }
+
+  showSpecialSwap() {
+    if (!PLAYER.activeSpecial) return;
+    const spec = CLASS_SPECS[PLAYER.activeSpecial];
+    const txt = this.add.text(W/2, H/2 + 40, `Special: ${spec.special}`, {
+      fontSize: '16px', fontFamily: 'serif', color: spec.accent, fontStyle: 'italic'
+    }).setOrigin(0.5).setDepth(100);
+    this.tweens.add({ targets: txt, alpha: 0, y: H/2, duration: 1000, onComplete: () => txt.destroy() });
+  }
+
+  useSpecial() {
+    if (!PLAYER.activeSpecial) return;
+    if (this.specialCooldown > 0) return;
+    const specKey = PLAYER.activeSpecial;
+    const data = getSpecData(specKey);
+    if (!data) return;
+
+    if (specKey === 'ranger') {
+      // Volley: fire multiple arrows in a cone toward cursor
+      const baseAngle = this.aimAngle;
+      const spread = data.spread;
+      for (let i = 0; i < data.arrows; i++) {
+        const t = data.arrows === 1 ? 0 : (i / (data.arrows - 1)) - 0.5;
+        const angle = baseAngle + t * spread * 2;
+        this.spawnBullet(angle, data.dmgMult);
+      }
+      this.specialCooldown = data.cd;
+    }
+    else if (specKey === 'knight') {
+      // Shield Wall: invulnerability
+      this.shieldWallActive = data.dur;
+      this.specialCooldown = data.cd;
+    }
+    else if (specKey === 'mage') {
+      // Arcane Nova: AoE damage around player
+      const radius = data.radius;
+      this.enemies.getChildren().forEach(eg => {
+        const e = eg.getData('enemy');
+        if (!e || !e.alive) return;
+        if (Phaser.Math.Distance.Between(this.shipX, this.shipY, e.x, e.y) < radius) {
+          e.hp -= data.dmg;
+          this.spawnParticle(e.x, e.y, 0x9966ff, 4);
+          if (e.hp <= 0) { e.alive = false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6); e.gfx.clear(); this.kills++; this.enemiesRemaining--; this.gainXP(e.xpValue); }
+        }
+      });
+      // Visual: expanding ring
+      const ring = this.add.graphics().setDepth(30);
+      this.novaEffects.push({ gfx: ring, x: this.shipX, y: this.shipY, radius: 10, maxRadius: radius, life: 0.4 });
+      this.specialCooldown = data.cd;
+    }
+    else if (specKey === 'cleric') {
+      // Divine Mend: heal
+      const heal = this.maxHp * data.healPct;
+      this.hp = Math.min(this.hp + heal, this.maxHp);
+      this.spawnParticle(this.shipX, this.shipY, 0xffe066, 12);
+      this.specialCooldown = data.cd;
+    }
+    this.updateHUD();
+  }
+
+  createHUD() {
+    const hpFrame = this.add.graphics().setDepth(50);
+    hpFrame.fillStyle(PAL.stoneDark,0.9); hpFrame.fillRoundedRect(12,H-32,206,22,3);
+    hpFrame.lineStyle(1,PAL.stoneLight,0.4); hpFrame.strokeRoundedRect(12,H-32,206,22,3);
+    this.hpBar = this.add.graphics().setDepth(51);
+    this.hpText = this.add.text(115,H-29,'',{fontSize:'11px',fontFamily:'serif',color:'#fff'}).setOrigin(0.5,0).setDepth(52);
+
+    this.waveText = this.add.text(W/2,8,'',{fontSize:'14px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5,0).setDepth(50);
+    this.levelText = this.add.text(W-15,H-32,'',{fontSize:'11px',fontFamily:'serif',color:PAL.accent}).setOrigin(1,0).setDepth(50);
+
+    const xpFrame = this.add.graphics().setDepth(50); xpFrame.fillStyle(PAL.stoneDark,0.7); xpFrame.fillRect(W-165,H-14,152,7);
+    this.xpBar = this.add.graphics().setDepth(51);
+
+    this.killText = this.add.text(15,8,'',{fontSize:'11px',fontFamily:'serif',color:PAL.textDim}).setDepth(50);
+    this.statPtsText = this.add.text(15,24,'',{fontSize:'11px',fontFamily:'serif',color:'#d4a017',fontStyle:'italic'}).setDepth(50);
+    this.comboText = this.add.text(W/2,50,'',{fontSize:'16px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5).setDepth(50).setAlpha(0);
+
+    // Special ability indicator
+    this.specialText = this.add.text(W/2,H-50,'',{fontSize:'10px',fontFamily:'serif',color:'#aaa',fontStyle:'italic'}).setOrigin(0.5).setDepth(50);
+    this.specialCdBar = this.add.graphics().setDepth(50);
+
+    this.updateHUD();
+  }
+
+  updateHUD() {
+    this.hpBar.clear();
+    const pct = this.hp / this.maxHp;
+    this.hpBar.fillStyle(pct > 0.5 ? 0x6b8e23 : pct > 0.25 ? 0xcc8800 : 0x8b1a1a, 1);
+    this.hpBar.fillRoundedRect(15,H-29,200*pct,16,2);
+    this.hpText.setText(`${Math.ceil(this.hp)} / ${this.maxHp}`);
+    this.waveText.setText(`— Wave ${this.wave} —`);
+
+    const xpN = xpForLevel(PLAYER.level);
+    this.levelText.setText(`Lv ${PLAYER.level}  ◆  ${PLAYER.xp}/${xpN} XP`);
+    this.xpBar.clear(); this.xpBar.fillStyle(PAL.gold,0.8); this.xpBar.fillRect(W-164,H-13,150*(PLAYER.xp/xpN),5);
+    this.killText.setText(`Kills: ${this.kills}`);
+
+    if (PLAYER.statPoints > 0) this.statPtsText.setText(`◆ ${PLAYER.statPoints} point${PLAYER.statPoints>1?'s':''} pending`);
+    else this.statPtsText.setText('');
+
+    // Special indicator
+    if (PLAYER.activeSpecial) {
+      const spec = CLASS_SPECS[PLAYER.activeSpecial];
+      const lv = getSpecLevel(PLAYER.activeSpecial);
+      const unlocked = getUnlockedSpecs();
+      const tabHint = unlocked.length > 1 ? '  [Tab: swap]' : '';
+      this.specialText.setText(`${spec.special} Lv${lv}${tabHint}`);
+      this.specialText.setColor(spec.accent);
+    } else {
+      this.specialText.setText('No special unlocked');
+    }
+  }
+
+  drawPlayer() {
+    const g = this.playerGfx;
+    g.clear();
+    const x = this.shipX, y = this.shipY, key = PLAYER.classKey;
+    if (this.invincible > 0 && this.shieldWallActive <= 0 && Math.floor(Date.now()/80)%2) return;
+
+    g.fillStyle(PLAYER.color, 1); g.fillRoundedRect(x-8,y-8,16,18,2);
+    g.fillStyle(0xd4a574, 1); g.fillCircle(x,y-14,6);
+
+    if (key==='knight') { g.fillStyle(0x888888,1); g.fillRoundedRect(x-7,y-20,14,10,3); g.fillRect(x-2,y-15,4,6); }
+    else if (key==='ranger') { g.fillStyle(0x4a7a2e,0.9); g.fillTriangle(x-8,y-14,x,y-24,x+8,y-14); }
+    else if (key==='mage') { g.fillStyle(0x5533aa,0.9); g.fillTriangle(x-6,y-14,x,y-28,x+6,y-14); g.fillStyle(0xffffff,0.3); g.fillCircle(x,y-16,2); }
+    else if (key==='cleric') { g.fillStyle(PAL.gold,0.8); g.fillCircle(x,y-20,4); g.fillStyle(PAL.gold,0.3); g.fillCircle(x,y-20,7); }
+
+    // Aim line (subtle)
+    g.lineStyle(1, PLAYER.color, 0.3);
+    g.moveTo(x, y - 20);
+    g.lineTo(x + Math.cos(this.aimAngle) * 25, y - 20 + Math.sin(this.aimAngle) * 25);
+    g.strokePath();
+
+    g.fillStyle(0x3a2a1a,1); g.fillRect(x-5,y+10,4,6); g.fillRect(x+1,y+10,4,6);
+  }
+
+  spawnBullet(angle, dmgMult = 1) {
+    const b = this.add.graphics();
+    const key = PLAYER.classKey;
+    const speed = 520;
+    const bx = this.shipX + Math.cos(angle) * 20;
+    const by = this.shipY - 20 + Math.sin(angle) * 20;
+
+    // Rotate the projectile visual to match angle
+    if (key === 'ranger') {
+      b.fillStyle(0xccbbaa,1); b.fillRect(-1,-7,2,14); b.fillStyle(0x888888,1); b.fillTriangle(-3,-7,0,-12,3,-7);
+    } else if (key === 'knight') {
+      b.fillStyle(0x888888,1); b.fillRect(-1.5,-5,3,10); b.fillStyle(0xaaaaaa,1); b.fillTriangle(-3,-5,0,-10,3,-5);
+    } else if (key === 'mage') {
+      b.fillStyle(0x9966ff,0.9); b.fillCircle(0,0,4); b.fillStyle(0xcc99ff,0.5); b.fillCircle(0,0,7);
+    } else if (key === 'cleric') {
+      b.fillStyle(PAL.gold,0.9); b.fillRect(-1,-5,2,10); b.fillRect(-3,-1,6,2);
+    }
+
+    b.setPosition(bx, by).setDepth(15);
+    b.setRotation(angle + Math.PI / 2);
+    b.setData('vx', Math.cos(angle) * speed);
+    b.setData('vy', Math.sin(angle) * speed);
+    b.setData('dmgMult', dmgMult);
+    this.bullets.add(b);
+  }
+
+  fireProjectile() {
+    const now = this.time.now;
+    if (now - this.lastFire < getFireDelay()) return;
+    this.lastFire = now;
+    this.spawnBullet(this.aimAngle, 1);
+  }
+
+  fireEnemyBullet(x, y) {
+    const b = this.add.graphics();
+    b.fillStyle(0x44ff44,0.8); b.fillCircle(0,0,4); b.fillStyle(0x88ff88,0.4); b.fillCircle(0,0,6);
+    b.setPosition(x,y+18).setDepth(15);
+    const angle = Phaser.Math.Angle.Between(x,y,this.shipX,this.shipY);
+    const speed = 140 + this.wave * 10;
+    b.setData('vx', Math.cos(angle)*speed); b.setData('vy', Math.sin(angle)*speed);
+    this.enemyBullets.add(b);
+  }
+
+  spawnParticle(x,y,color,count=6) {
+    for (let i = 0; i < count; i++) {
+      const p = this.add.circle(x,y,Phaser.Math.Between(1,3),color,1).setDepth(25);
+      const a = Math.random()*Math.PI*2, s = Phaser.Math.Between(40,160);
+      this.particles.push({obj:p,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:0.4+Math.random()*0.3});
+    }
+  }
+
+  takeDamage(amount) {
+    if (this.invincible > 0) return;
+    if (this.shieldWallActive > 0) { this.spawnParticle(this.shipX,this.shipY,0x8ca8cc,4); return; }
+    this.hp -= amount * (1 - getArmor());
+    this.invincible = 0.8; this.shakeTime = 0.15;
+    this.spawnParticle(this.shipX,this.shipY,0xcc3333,8);
+
+    if (this.hp <= 0) {
+      this.hp = 0; this.updateHUD();
+      PLAYER.totalKills += this.kills;
+      PLAYER.runs = (PLAYER.runs||0)+1;
+      SaveManager.save();
+      const dd = { wave: this.wave, kills: this.kills };
+      if (PLAYER.statPoints > 0) this.scene.start('LevelUpScene', dd);
+      else this.scene.start('GameOverScene', dd);
+    }
+  }
+
+  gainXP(amount) {
+    this.combo++; this.comboTimer = 2;
+    PLAYER.xp += Math.floor(amount * (1 + this.combo * 0.05));
+    if (this.combo >= 3) { this.comboText.setText(`${this.combo}x Combo`); this.comboText.setAlpha(1); }
+    while (PLAYER.xp >= xpForLevel(PLAYER.level)) {
+      PLAYER.xp -= xpForLevel(PLAYER.level);
+      PLAYER.level++; PLAYER.statPoints++;
+      const txt = this.add.text(W/2,H/2,`Level ${PLAYER.level}!`,{fontSize:'28px',fontFamily:'serif',color:PAL.accent,stroke:'#1a1408',strokeThickness:3,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
+      const sub = this.add.text(W/2,H/2+30,'+1 Point',{fontSize:'14px',fontFamily:'serif',color:PAL.text,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
+      this.tweens.add({targets:[txt,sub],y:'-=60',alpha:0,duration:1200,ease:'Power2',onComplete:()=>{txt.destroy();sub.destroy();}});
+    }
+    this.updateHUD();
+  }
+
+  startWave() {
+    this.wave++;
+    PLAYER.wavesCleared = this.wave - 1;
+    if (this.wave > PLAYER.highestWave) PLAYER.highestWave = this.wave;
+    this.waveActive = true;
+
+    const announce = this.add.text(W/2,H/2-80,`Wave ${this.wave}`,{fontSize:'32px',fontFamily:'serif',color:PAL.accent,stroke:'#1a1408',strokeThickness:3,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
+    const flavors = ['They approach the walls...','The swarm grows bolder.','Chittering in the dark.','The hive awakens.','Mandibles at the gate.','No quarter given.','The earth trembles.','Hold the line!','By steel and fire.','Endless hunger.'];
+    const sub = this.add.text(W/2,H/2-42,flavors[Math.min(this.wave-1,flavors.length-1)],{fontSize:'12px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
+    this.tweens.add({targets:[announce,sub],alpha:0,duration:600,delay:1200,onComplete:()=>{announce.destroy();sub.destroy();}});
+    this.time.delayedCall(800,()=>this.spawnWaveEnemies());
+    this.updateHUD();
+  }
+
+  spawnWaveEnemies() {
+    const count = 6+this.wave*2, rows = Math.ceil(count/8), cols = Math.min(count,8);
+    let spawned = 0;
+    for (let r = 0; r < rows && spawned < count; r++) {
+      const rc = Math.min(cols, count-spawned);
+      for (let c = 0; c < rc; c++) {
+        const ex = 50+c*((W-100)/(rc-1||1)), ey = -30-r*50, ty = 40+r*50;
+        let type = 'crawler';
+        if (this.wave>=3&&Math.random()<0.25) type='flyer';
+        if (this.wave>=5&&Math.random()<0.15) type='spitter';
+        this.spawnEnemy(ex,ey,ty,type,spawned*70); spawned++;
+      }
+    }
+    this.enemiesRemaining = spawned;
+  }
+
+  spawnEnemy(x,startY,targetY,type,delay) {
+    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322};
+    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave};
+    const xpMap={crawler:8,flyer:12,spitter:15};
+    const g = this.add.graphics().setDepth(10);
+    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer:0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true};
+    this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:900,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
+    this.enemies.add(g); g.setData('enemy',enemy);
+  }
+
+  drawEnemy(e, time) {
+    e.gfx.clear();
+    if (!e.alive) return;
+    const x=e.x,y=e.y,lo=Math.sin((time*0.006)+e.legPhase)*3;
+    if (e.type==='crawler') {
+      e.gfx.fillStyle(e.color,1); e.gfx.fillEllipse(x,y,18,12); e.gfx.fillEllipse(x,y+10,14,8);
+      e.gfx.fillStyle(0x3a5a1a,1); e.gfx.fillCircle(x,y+16,6);
+      e.gfx.lineStyle(2,0x2a4a10,1); e.gfx.moveTo(x-5,y+20); e.gfx.lineTo(x-8,y+26); e.gfx.moveTo(x+5,y+20); e.gfx.lineTo(x+8,y+26); e.gfx.strokePath();
+      e.gfx.lineStyle(1,e.color,0.7);
+      for (let s=-1;s<=1;s+=2) { e.gfx.moveTo(x+s*8,y-2); e.gfx.lineTo(x+s*16,y-4+lo); e.gfx.moveTo(x+s*8,y+4); e.gfx.lineTo(x+s*16,y+6-lo); e.gfx.moveTo(x+s*6,y+10); e.gfx.lineTo(x+s*14,y+12+lo); }
+      e.gfx.strokePath();
+      e.gfx.fillStyle(0xff4444,0.8); e.gfx.fillCircle(x-3,y+14,2); e.gfx.fillCircle(x+3,y+14,2);
+    } else if (e.type==='flyer') {
+      const wf=Math.sin(time*0.015+e.legPhase)*6;
+      e.gfx.fillStyle(e.color,0.4); e.gfx.fillEllipse(x-14-wf,y-2,16,8); e.gfx.fillEllipse(x+14+wf,y-2,16,8);
+      e.gfx.fillStyle(e.color,1); e.gfx.fillEllipse(x,y,12,16);
+      e.gfx.fillStyle(0x6a5a12,1); e.gfx.fillTriangle(x-4,y-8,x+4,y-8,x,y-18);
+      e.gfx.fillStyle(0xff6600,0.9); e.gfx.fillCircle(x-3,y+4,2); e.gfx.fillCircle(x+3,y+4,2);
+    } else if (e.type==='spitter') {
+      e.gfx.fillStyle(e.color,1); e.gfx.fillRoundedRect(x-14,y-8,28,22,6);
+      e.gfx.fillStyle(0x5a2212,0.6); e.gfx.fillRoundedRect(x-12,y-6,24,8,3);
+      e.gfx.lineStyle(2,e.color,0.8);
+      for (let s=-1;s<=1;s+=2) { e.gfx.moveTo(x+s*12,y); e.gfx.lineTo(x+s*20,y+4+lo); e.gfx.moveTo(x+s*12,y+8); e.gfx.lineTo(x+s*20,y+14-lo); }
+      e.gfx.strokePath();
+      e.gfx.fillStyle(0x44ff44,0.6); e.gfx.fillCircle(x,y+16,4); e.gfx.fillStyle(0x44ff44,0.3); e.gfx.fillCircle(x,y+22,2);
+      e.gfx.fillStyle(0xff2222,0.9); e.gfx.fillCircle(x-5,y-2,2.5); e.gfx.fillCircle(x+5,y-2,2.5);
+    }
+    if (e.hp<e.maxHp) { e.gfx.fillStyle(0x1a1a1a,0.8); e.gfx.fillRect(x-12,y-22,24,3); e.gfx.fillStyle(0xcc2222,1); e.gfx.fillRect(x-12,y-22,24*(e.hp/e.maxHp),3); }
+  }
+
+  update(time, delta) {
+    const dt = delta/1000;
+    updateTorches(this.torches, time);
+    updateFieldDebris(this.debris, delta);
+
+    if (this.shakeTime>0) { this.shakeTime-=dt; this.cameras.main.setScroll(Phaser.Math.Between(-3,3),Phaser.Math.Between(-3,3)); }
+    else this.cameras.main.setScroll(0,0);
+
+    if (this.invincible>0) this.invincible-=dt;
+    if (this.comboTimer>0) { this.comboTimer-=dt; if(this.comboTimer<=0){this.combo=0;this.comboText.setAlpha(0);} }
+    if (this.specialCooldown>0) this.specialCooldown -= delta;
+    if (this.shieldWallActive>0) this.shieldWallActive -= delta;
+
+    // Shield wall visual
+    this.shieldGfx.clear();
+    if (this.shieldWallActive > 0) {
+      const sa = Math.min(1, this.shieldWallActive / 500) * 0.4;
+      this.shieldGfx.lineStyle(3, 0x8ca8cc, sa);
+      this.shieldGfx.strokeCircle(this.shipX, this.shipY - 5, 22 + Math.sin(time*0.01)*3);
+      this.shieldGfx.fillStyle(0x8ca8cc, sa * 0.3);
+      this.shieldGfx.fillCircle(this.shipX, this.shipY - 5, 20);
+    }
+
+    // Update aim angle toward mouse
+    const ptr = this.input.activePointer;
+    this.aimAngle = Phaser.Math.Angle.Between(this.shipX, this.shipY - 20, ptr.worldX, ptr.worldY);
+
+    // Movement
+    let dx = 0;
+    if (this.cursors.left.isDown || this.wasd.A.isDown) dx = -1;
+    if (this.cursors.right.isDown || this.wasd.D.isDown) dx = 1;
+    this.shipX += dx * getMoveSpeed() * dt;
+    this.shipX = Phaser.Math.Clamp(this.shipX, 24, W-24);
+    this.drawPlayer();
+
+    // Fire: left mouse held OR space
+    if (ptr.leftButtonDown() || this.spaceKey.isDown) this.fireProjectile();
+
+    // Special cooldown bar
+    this.specialCdBar.clear();
+    if (PLAYER.activeSpecial) {
+      const data = getSpecData(PLAYER.activeSpecial);
+      if (data) {
+        const cdPct = Math.max(0, this.specialCooldown / data.cd);
+        const barW = 60, barH = 4, barX = W/2 - barW/2, barY = H - 44;
+        this.specialCdBar.fillStyle(0x1a1a1a, 0.6); this.specialCdBar.fillRect(barX, barY, barW, barH);
+        if (cdPct > 0) { this.specialCdBar.fillStyle(0x663333, 0.8); this.specialCdBar.fillRect(barX, barY, barW * cdPct, barH); }
+        else { this.specialCdBar.fillStyle(0x44aa44, 0.8); this.specialCdBar.fillRect(barX, barY, barW, barH); }
+      }
+    }
+
+    // Player bullets
+    this.bullets.getChildren().forEach(b => {
+      b.x += b.getData('vx')*dt; b.y += b.getData('vy')*dt;
+      if (b.y<-20||b.y>H+20||b.x<-20||b.x>W+20) { b.destroy(); return; }
+      this.enemies.getChildren().forEach(eg => {
+        const e = eg.getData('enemy');
+        if (!e||!e.alive) return;
+        if (Phaser.Math.Distance.Between(b.x,b.y,e.x,e.y)<18) {
+          e.hp -= getDamage() * (b.getData('dmgMult') || 1);
+          b.destroy(); this.spawnParticle(e.x,e.y,e.color,3);
+          if (e.hp<=0) {
+            e.alive=false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6);
+            e.gfx.clear(); this.kills++; this.enemiesRemaining--; this.gainXP(e.xpValue);
+          }
+        }
+      });
+    });
+
+    // Enemy bullets
+    this.enemyBullets.getChildren().forEach(b => {
+      b.x+=b.getData('vx')*dt; b.y+=b.getData('vy')*dt;
+      if (b.y>H+20||b.x<-20||b.x>W+20) { b.destroy(); return; }
+      if (Phaser.Math.Distance.Between(b.x,b.y,this.shipX,this.shipY)<16) { b.destroy(); this.takeDamage(2+Math.floor(this.wave*0.5)); }
+    });
+
+    // Enemies
+    this.enemies.getChildren().forEach(eg => {
+      const e = eg.getData('enemy');
+      if (!e||!e.alive) return;
+      if (e.arrived&&!e.diving) { e.wobble+=dt*1.2*e.wobbleDir; e.x+=Math.sin(e.wobble)*30*dt; e.x=Phaser.Math.Clamp(e.x,20,W-20); }
+      if (e.type==='flyer'&&e.arrived&&!e.diving) { e.diveTimer-=delta; if(e.diveTimer<=0){e.diving=true;e.diveSpeed=200+this.wave*15;} }
+      if (e.diving) {
+        e.y+=e.diveSpeed*dt; e.x+=(e.x<this.shipX?1:-1)*60*dt;
+        if (e.y>H+30) { e.y=-30; e.x=Phaser.Math.Between(40,W-40); e.diving=false; e.diveTimer=Phaser.Math.Between(2000,4000); e.arrived=false; e.targetY=Phaser.Math.Between(40,180); this.tweens.add({targets:e,y:e.targetY,duration:600,ease:'Sine.easeOut',onComplete:()=>{e.arrived=true;}}); }
+      }
+      if (e.type==='spitter'&&e.arrived) { e.shootTimer-=delta; if(e.shootTimer<=0){this.fireEnemyBullet(e.x,e.y);e.shootTimer=Phaser.Math.Between(1200,3000-this.wave*50);} }
+      if (e.arrived||e.diving) {
+        if (Phaser.Math.Distance.Between(e.x,e.y,this.shipX,this.shipY)<22) {
+          this.takeDamage(3+this.wave); e.hp=-999; e.alive=false;
+          this.spawnParticle(e.x,e.y,e.color,10); e.gfx.clear(); this.enemiesRemaining--;
+        }
+      }
+      this.drawEnemy(e, time);
+    });
+
+    // Nova effects
+    for (let i = this.novaEffects.length-1; i >= 0; i--) {
+      const n = this.novaEffects[i];
+      n.life -= dt;
+      n.radius += (n.maxRadius - n.radius) * dt * 6;
+      n.gfx.clear();
+      if (n.life > 0) {
+        n.gfx.lineStyle(2, 0x9966ff, n.life * 2);
+        n.gfx.strokeCircle(n.x, n.y, n.radius);
+      } else { n.gfx.destroy(); this.novaEffects.splice(i, 1); }
+    }
+
+    // Particles
+    for (let i = this.particles.length-1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.obj.x+=p.vx*dt; p.obj.y+=p.vy*dt; p.life-=dt;
+      p.obj.setAlpha(Math.max(0,p.life*2));
+      if (p.life<=0) { p.obj.destroy(); this.particles.splice(i,1); }
+    }
+
+    // Wave complete
+    if (this.waveActive && this.enemiesRemaining <= 0) {
+      this.waveActive = false;
+      this.enemies.clear(true, true);
+      this.time.delayedCall(1500, () => this.startWave());
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  LEVEL UP (on death — stats + class mastery)
+// ════════════════════════════════════════════════════════════
+class LevelUpScene extends Phaser.Scene {
+  constructor() { super('LevelUpScene'); }
+  init(data) { this.deathData = data; }
+
+  create() {
+    this.add.rectangle(W/2,H/2,W,H,0x0a0806);
+    const border = this.add.graphics(); border.lineStyle(2,PAL.gold,0.3); border.strokeRect(10,10,W-20,H-20);
+
+    this.add.text(W/2,28,'You Have Fallen',{fontSize:'20px',fontFamily:'serif',color:'#8b1a1a',fontStyle:'italic'}).setOrigin(0.5);
+
+    this.pointsText = this.add.text(W/2,52,`Points: ${PLAYER.statPoints}`,{fontSize:'14px',fontFamily:'serif',color:PAL.text}).setOrigin(0.5);
+
+    // ── STATS SECTION ──
+    this.add.text(W/2,78,'— Attributes —',{fontSize:'12px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5);
+    const statKeys = ['fort','might','agil','haste','armor'];
+    this.btns = [];
+
+    statKeys.forEach((key, i) => {
+      const y = 100 + i * 40;
+      const info = STAT_INFO[key];
+      const accent = CLASSES[PLAYER.classKey].accent;
+      this.add.text(30,y,info.name,{fontSize:'13px',fontFamily:'serif',color:accent});
+      this.add.text(30,y+16,info.desc,{fontSize:'9px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'});
+      const vt = this.add.text(320,y,`${PLAYER.stats[key]}`,{fontSize:'15px',fontFamily:'serif',color:PAL.text});
+      const btn = this.add.text(370,y-2,'[ + ]',{fontSize:'15px',fontFamily:'serif',color:'#6b8e23'}).setInteractive({useHandCursor:true});
+      this.btns.push(btn);
+      btn.on('pointerover',()=>btn.setColor('#8fbc3a')); btn.on('pointerout',()=>btn.setColor('#6b8e23'));
+      btn.on('pointerdown',()=>{
+        if (PLAYER.statPoints<=0) return;
+        PLAYER.stats[key]++; PLAYER.statPoints--;
+        vt.setText(`${PLAYER.stats[key]}`); this.pointsText.setText(`Points: ${PLAYER.statPoints}`);
+        if (PLAYER.statPoints<=0) this.showContinue();
+      });
+    });
+
+    // ── CLASS MASTERY SECTION ──
+    this.add.text(W/2,310,'— Class Mastery —',{fontSize:'12px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5);
+    this.add.text(W/2,326,'Spend points to unlock & strengthen specials',{fontSize:'9px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5);
+
+    const specKeys = ['ranger','knight','mage','cleric'];
+    specKeys.forEach((key, i) => {
+      const y = 346 + i * 58;
+      const spec = CLASS_SPECS[key];
+      const lv = getSpecLevel(key);
+      const maxLv = spec.levels.length;
+
+      this.add.text(30,y,spec.name,{fontSize:'12px',fontFamily:'serif',color:spec.accent});
+      this.add.text(30,y+15,`${spec.special}: ${spec.desc}`,{fontSize:'9px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'});
+      const lvText = this.add.text(30,y+28,lv > 0 ? `Level ${lv}/${maxLv}` : 'Locked',{fontSize:'9px',fontFamily:'serif',color:lv>0?'#aaa':'#555'});
+
+      const vt = this.add.text(320,y,`${lv}`,{fontSize:'15px',fontFamily:'serif',color:PAL.text});
+      const canLevel = lv < maxLv;
+      const btn = this.add.text(370,y-2,canLevel ? '[ + ]' : 'MAX',{
+        fontSize:'15px',fontFamily:'serif',color:canLevel?'#6b8e23':'#555'
+      });
+      if (canLevel) {
+        btn.setInteractive({useHandCursor:true});
+        this.btns.push(btn);
+        btn.on('pointerover',()=>btn.setColor('#8fbc3a')); btn.on('pointerout',()=>btn.setColor('#6b8e23'));
+        btn.on('pointerdown',()=>{
+          if (PLAYER.statPoints<=0) return;
+          PLAYER.classSpecs[key]++;
+          PLAYER.statPoints--;
+          const newLv = PLAYER.classSpecs[key];
+          vt.setText(`${newLv}`);
+          lvText.setText(`Level ${newLv}/${maxLv}`).setColor('#aaa');
+          this.pointsText.setText(`Points: ${PLAYER.statPoints}`);
+
+          // Auto-equip if first spec unlocked
+          if (newLv === 1 && !PLAYER.activeSpecial) PLAYER.activeSpecial = key;
+          // If they had no active or it was null, set it
+          if (!PLAYER.activeSpecial) PLAYER.activeSpecial = key;
+
+          if (newLv >= maxLv) { btn.setText('MAX').setColor('#555').disableInteractive(); }
+          if (PLAYER.statPoints<=0) this.showContinue();
+        });
+      }
+    });
+
+    // Special selector hint
+    const unlocked = getUnlockedSpecs();
+    if (unlocked.length > 1) {
+      this.add.text(W/2, 582, `Active special: ${CLASS_SPECS[PLAYER.activeSpecial]?.special || 'None'} — press Tab in-game to swap`,{
+        fontSize:'9px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'
+      }).setOrigin(0.5);
+    }
+  }
+
+  showContinue() {
+    this.btns.forEach(b => { b.setColor('#3a3a2a'); b.disableInteractive(); });
+    const btn = this.add.text(W/2,H-50,'— View Results —',{fontSize:'18px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5).setInteractive({useHandCursor:true});
+    btn.on('pointerover',()=>btn.setColor('#ffe8a0')); btn.on('pointerout',()=>btn.setColor(PAL.accent));
+    btn.on('pointerdown',()=>{ SaveManager.save(); this.scene.start('GameOverScene',this.deathData); });
+    this.tweens.add({targets:btn,alpha:0.4,duration:700,yoyo:true,repeat:-1});
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  GAME OVER
+// ════════════════════════════════════════════════════════════
+class GameOverScene extends Phaser.Scene {
+  constructor() { super('GameOverScene'); }
+  init(data) { this.finalWave = data.wave||0; this.finalKills = data.kills||0; }
+
+  create() {
+    this.add.rectangle(W/2,H/2,W,H,0x0a0806);
+    const splat = this.add.graphics(); splat.fillStyle(PAL.blood,0.15);
+    for (let i=0;i<8;i++) splat.fillCircle(Phaser.Math.Between(50,W-50),Phaser.Math.Between(50,H-50),Phaser.Math.Between(20,60));
+
+    this.add.text(W/2,60,'The Keep Has Fallen',{fontSize:'28px',fontFamily:'serif',color:'#8b1a1a',stroke:'#2a0808',strokeThickness:3,fontStyle:'italic'}).setOrigin(0.5);
+    const accent = CLASSES[PLAYER.classKey].accent;
+    const line = this.add.graphics(); line.lineStyle(1,PAL.gold,0.3); line.moveTo(80,95); line.lineTo(W-80,95); line.strokePath();
+
+    const stats = [['Class',PLAYER.className],['Level',`${PLAYER.level}`],['Waves',`${this.finalWave-1}`],['Kills This Run',`${this.finalKills}`],['Career Kills',`${PLAYER.totalKills}`],['Runs',`${PLAYER.runs}`]];
+    stats.forEach(([l,v],i)=>{
+      const y=115+i*32;
+      this.add.text(80,y,l,{fontSize:'13px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'});
+      this.add.text(W-80,y,v,{fontSize:'13px',fontFamily:'serif',color:accent}).setOrigin(1,0);
+    });
+
+    // Attributes
+    const line2 = this.add.graphics(); line2.lineStyle(1,PAL.gold,0.2); line2.moveTo(80,315); line2.lineTo(W-80,315); line2.strokePath();
+    this.add.text(W/2,325,'— Attributes —',{fontSize:'11px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'}).setOrigin(0.5);
+    ['fort','might','agil','haste','armor'].forEach((key,i)=>{
+      const y=345+i*20;
+      this.add.text(100,y,STAT_INFO[key].name,{fontSize:'11px',fontFamily:'serif',color:PAL.textDim});
+      this.add.text(W-100,y,`${PLAYER.stats[key]}`,{fontSize:'11px',fontFamily:'serif',color:accent}).setOrigin(1,0);
+    });
+
+    // Masteries
+    this.add.text(W/2,455,'— Masteries —',{fontSize:'11px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'}).setOrigin(0.5);
+    const specKeys = ['ranger','knight','mage','cleric'];
+    specKeys.forEach((key,i)=>{
+      const y=475+i*20, lv=getSpecLevel(key);
+      if (lv>0) {
+        this.add.text(100,y,`${CLASS_SPECS[key].special}`,{fontSize:'11px',fontFamily:'serif',color:CLASS_SPECS[key].accent});
+        this.add.text(W-100,y,`Lv ${lv}`,{fontSize:'11px',fontFamily:'serif',color:CLASS_SPECS[key].accent}).setOrigin(1,0);
+      } else {
+        this.add.text(100,y,CLASSES[key].name,{fontSize:'11px',fontFamily:'serif',color:'#3a3020'});
+        this.add.text(W-100,y,'—',{fontSize:'11px',fontFamily:'serif',color:'#3a3020'}).setOrigin(1,0);
+      }
+    });
+
+    // Buttons
+    const retry = this.add.text(W/2,H-110,'— Fight Again —',{fontSize:'20px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5).setInteractive({useHandCursor:true});
+    retry.on('pointerover',()=>retry.setColor('#ffe8a0')); retry.on('pointerout',()=>retry.setColor(PAL.accent));
+    retry.on('pointerdown',()=>this.scene.start('GameScene'));
+    this.add.text(W/2,H-82,'Keep stats & specs, restart from Wave 1',{fontSize:'9px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'}).setOrigin(0.5);
+
+    const reroll = this.add.text(W/2,H-52,'— New Character —',{fontSize:'14px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5).setInteractive({useHandCursor:true});
+    reroll.on('pointerover',()=>reroll.setColor(PAL.text)); reroll.on('pointerout',()=>reroll.setColor(PAL.textDim));
+    reroll.on('pointerdown',()=>{ SaveManager.clear(); this.scene.start('ClassSelectScene'); });
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  BOOT
+// ════════════════════════════════════════════════════════════
+new Phaser.Game({
+  type: Phaser.AUTO, width: W, height: H, backgroundColor: '#0a0806',
+  parent: document.body,
+  scene: [TitleScene, ClassSelectScene, GameScene, LevelUpScene, GameOverScene],
+  physics: { default: 'arcade' },
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  input: { keyboard: true }
+});
+</script>
+</body>
+</html>
