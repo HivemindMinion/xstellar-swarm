@@ -14,10 +14,10 @@
 <body>
 <script>
 // ============================================================
-//  XSTELLAR: SWARM — CASTLE DEFENSE  v5
+//  XSTELLAR: SWARM — CASTLE DEFENSE  v6
 //  Medieval Galaga × RPG × Survival
 //  Humans vs. Bugs — Defend the Keep
-//  Mouse-aimed combat, class specialization, specials
+//  v6: stat tradeoffs + combo pierce (depth, not features)
 // ============================================================
 
 const W = 480, H = 720;
@@ -44,8 +44,8 @@ const STAT_INFO = {
   fort:  { name: 'Fortitude', desc: '+5 Max HP' },
   might: { name: 'Might',     desc: '+1 Damage' },
   agil:  { name: 'Agility',   desc: '+15 Move speed' },
-  haste: { name: 'Haste',     desc: '-30ms attack delay' },
-  armor: { name: 'Armor',     desc: '+2% dmg reduction' }
+  haste: { name: 'Haste',     desc: '-30ms attack delay, -0.5 dmg' },
+  armor: { name: 'Armor',     desc: '+2% dmg reduction, -3 speed' }
 };
 
 // ── CLASS SPECIALIZATIONS ───────────────────────────────────
@@ -108,19 +108,29 @@ function xpForLevel(lv) { return lv * 80 + 20; }
 let PLAYER = null;
 
 const SaveManager = {
-  KEY: 'xstellar_swarm_v5',
-  hasSave() { try { return localStorage.getItem(this.KEY) !== null; } catch { return false; } },
+  KEY: 'xstellar_swarm_v6',
+  OLD_KEYS: ['xstellar_swarm_v5'],
+  migrate() {
+    try {
+      if (localStorage.getItem(this.KEY) !== null) return;
+      for (const ok of this.OLD_KEYS) {
+        const old = localStorage.getItem(ok);
+        if (old) { localStorage.setItem(this.KEY, old); localStorage.removeItem(ok); return; }
+      }
+    } catch {}
+  },
+  hasSave() { this.migrate(); try { return localStorage.getItem(this.KEY) !== null; } catch { return false; } },
   save() {
     if (!PLAYER) return;
     try { localStorage.setItem(this.KEY, JSON.stringify({
-      v: 2, classKey: PLAYER.classKey, level: PLAYER.level, xp: PLAYER.xp,
+      v: 3, classKey: PLAYER.classKey, level: PLAYER.level, xp: PLAYER.xp,
       statPoints: PLAYER.statPoints, stats: PLAYER.stats,
       classSpecs: PLAYER.classSpecs, activeSpecial: PLAYER.activeSpecial,
       totalKills: PLAYER.totalKills, highestWave: PLAYER.highestWave,
       runs: PLAYER.runs, savedAt: Date.now()
     })); } catch(e) { console.warn('Save failed:', e); }
   },
-  load() { try { const r = localStorage.getItem(this.KEY); return r ? JSON.parse(r) : null; } catch { return null; } },
+  load() { this.migrate(); try { const r = localStorage.getItem(this.KEY); return r ? JSON.parse(r) : null; } catch { return null; } },
   clear() { try { localStorage.removeItem(this.KEY); } catch {} }
 };
 
@@ -154,10 +164,19 @@ function loadPlayer() {
 }
 
 function getMaxHP()     { return PLAYER.stats.fort * 5 + 20; }
-function getDamage()    { return PLAYER.stats.might + 1; }
-function getMoveSpeed() { return 120 + PLAYER.stats.agil * 15; }
+function getDamage()    { return Math.max(1, 1 + PLAYER.stats.might - PLAYER.stats.haste * 0.5); }
+function getMoveSpeed() { return Math.max(60, 120 + PLAYER.stats.agil * 15 - PLAYER.stats.armor * 3); }
 function getFireDelay() { return Math.max(80, 400 - PLAYER.stats.haste * 30); }
 function getArmor()     { return Math.min(0.75, PLAYER.stats.armor * 0.02); }
+
+// Combo pierce: combat resource derived from kill streak
+// Pairs with mouse aim (line up enemies) and Volley (cone clears)
+function comboPierceFor(combo) {
+  if (combo >= 15) return 3;
+  if (combo >= 10) return 2;
+  if (combo >= 5) return 1;
+  return 0;
+}
 
 function getSpecLevel(specKey) { return PLAYER.classSpecs[specKey] || 0; }
 function getSpecData(specKey) {
@@ -290,7 +309,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>this.scene.start('ClassSelectScene'));
       this.input.on('pointerdown',()=>this.scene.start('ClassSelectScene'));
     }
-    this.add.text(W/2,H-30,'v5.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v6.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -550,6 +569,16 @@ class GameScene extends Phaser.Scene {
     const bx = this.shipX + Math.cos(angle) * 20;
     const by = this.shipY - 20 + Math.sin(angle) * 20;
 
+    // Combo pierce: lock at fire-time, decremented per hit
+    const pierce = comboPierceFor(this.combo);
+
+    // Pierce halo behind the bullet
+    if (pierce > 0) {
+      const halo = pierce >= 3 ? 0xffe066 : pierce >= 2 ? 0xff9933 : 0xccddff;
+      b.fillStyle(halo, 0.18 + pierce * 0.08); b.fillCircle(0, 0, 6 + pierce * 2);
+      b.fillStyle(halo, 0.35); b.fillCircle(0, 0, 3 + pierce);
+    }
+
     // Rotate the projectile visual to match angle
     if (key === 'ranger') {
       b.fillStyle(0xccbbaa,1); b.fillRect(-1,-7,2,14); b.fillStyle(0x888888,1); b.fillTriangle(-3,-7,0,-12,3,-7);
@@ -566,6 +595,8 @@ class GameScene extends Phaser.Scene {
     b.setData('vx', Math.cos(angle) * speed);
     b.setData('vy', Math.sin(angle) * speed);
     b.setData('dmgMult', dmgMult);
+    b.setData('pierce', pierce);
+    b.setData('hits', []);
     this.bullets.add(b);
   }
 
@@ -615,7 +646,14 @@ class GameScene extends Phaser.Scene {
   gainXP(amount) {
     this.combo++; this.comboTimer = 2;
     PLAYER.xp += Math.floor(amount * (1 + this.combo * 0.05));
-    if (this.combo >= 3) { this.comboText.setText(`${this.combo}x Combo`); this.comboText.setAlpha(1); }
+    if (this.combo >= 3) {
+      const p = comboPierceFor(this.combo);
+      const tier = p >= 3 ? '  ◆ Pierce III' : p >= 2 ? '  ◆ Pierce II' : p >= 1 ? '  ◆ Pierce I' : '';
+      const color = p >= 3 ? '#ffe066' : p >= 2 ? '#ff9933' : p >= 1 ? '#ccddff' : PAL.accent;
+      this.comboText.setText(`${this.combo}x Combo${tier}`);
+      this.comboText.setColor(color);
+      this.comboText.setAlpha(1);
+    }
     while (PLAYER.xp >= xpForLevel(PLAYER.level)) {
       PLAYER.xp -= xpForLevel(PLAYER.level);
       PLAYER.level++; PLAYER.statPoints++;
@@ -747,20 +785,28 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Player bullets
+    // Player bullets — pierce-aware
     this.bullets.getChildren().forEach(b => {
+      if (!b.active) return;
       b.x += b.getData('vx')*dt; b.y += b.getData('vy')*dt;
       if (b.y<-20||b.y>H+20||b.x<-20||b.x>W+20) { b.destroy(); return; }
       this.enemies.getChildren().forEach(eg => {
+        if (!b.active) return;
         const e = eg.getData('enemy');
         if (!e||!e.alive) return;
         if (Phaser.Math.Distance.Between(b.x,b.y,e.x,e.y)<18) {
+          const hits = b.getData('hits');
+          if (hits.includes(e)) return;
+          hits.push(e);
           e.hp -= getDamage() * (b.getData('dmgMult') || 1);
-          b.destroy(); this.spawnParticle(e.x,e.y,e.color,3);
+          this.spawnParticle(e.x,e.y,e.color,3);
           if (e.hp<=0) {
             e.alive=false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6);
             e.gfx.clear(); this.kills++; this.enemiesRemaining--; this.gainXP(e.xpValue);
           }
+          const remaining = b.getData('pierce') || 0;
+          if (remaining <= 0) { b.destroy(); return; }
+          b.setData('pierce', remaining - 1);
         }
       });
     });

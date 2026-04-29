@@ -49,6 +49,30 @@ Multi-spec into different classes to unlock multiple specials, then swap between
 - Stats persist between runs (roguelite loop)
 - localStorage persistence (Firebase-ready `SaveManager` interface)
 
+### Stat Tradeoffs (v6)
+Allocation is a real choice — some stats compete:
+
+| Stat | Effect | Tradeoff |
+|------|--------|----------|
+| Fortitude | +5 Max HP | — |
+| Might | +1 Damage | — |
+| Agility | +15 Move speed | — |
+| Haste | -30ms attack delay | -0.5 damage per shot |
+| Armor | +2% damage reduction | -3 move speed |
+
+Pure-Might or pure-Haste DPS-stack is strong; mixing 50/50 is a trap. Pure-Armor tank vs pure-Agility skirmisher are both viable, but stacking both fights itself.
+
+### Combo Pierce (v6)
+Combo isn't just an XP multiplier — it's a combat resource. Bullets pierce extra enemies as your kill streak climbs, rewarding tight aim and target-line setup:
+
+| Combo | Effect |
+|-------|--------|
+| 5+ | Pierce 1 enemy |
+| 10+ | Pierce 2 enemies |
+| 15+ | Pierce 3 enemies |
+
+Combo decays after 2 seconds of no kills. High-combo Volley = wall clearer.
+
 ## Tech Stack
 
 - **Phaser 3** (CDN) — Game engine
