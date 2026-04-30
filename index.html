@@ -32,6 +32,7 @@
 //  v16: PER also -0.5% special CD/pt (caster build identity)
 //  v17: Screamer enemy — runs AWAY, screams broodlings if it escapes
 //  v18: Faction codename + lore-grounded class descriptions
+//  v19: Elite modifiers — Berserk / Speedy / Regen (replay variety)
 // ============================================================
 
 const W = 480, H = 720;
@@ -120,6 +121,14 @@ const CLASS_SPECS = {
 };
 
 function xpForLevel(lv) { return lv * 80 + 20; }
+
+// ── ELITE MODIFIERS (rare buffs on regular enemies, replay variety) ──
+const ELITE_MODS = {
+  berserk: { name: 'Berserk', color: 0xff3322, dmgMult: 1.5 },
+  speedy:  { name: 'Speedy',  color: 0x44aaff, speedMult: 1.4 },
+  regen:   { name: 'Regen',   color: 0x44ff66, hpRegen: 1.0 } // HP/sec
+};
+const ELITE_KEYS = Object.keys(ELITE_MODS);
 
 // ── WAVE BANDS (named progression chunks, lore-grounded) ────
 const WAVE_BANDS = [
@@ -410,7 +419,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v18.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v19.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -866,7 +875,10 @@ class GameScene extends Phaser.Scene {
     if (type==='queen') initSpawnTimer = 4000;
     if (type==='tyrant') initSpawnTimer = 5000;
     if (type==='architect') initSpawnTimer = 3500;
-    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0};
+    // Elite roll: 6% chance on regular enemies (skip bosses, sacs, broodlings) wave 4+
+    const eliteEligible = !isBoss && type !== 'eggsac' && type !== 'broodling';
+    const elite = (eliteEligible && this.wave >= 4 && Math.random() < 0.06) ? Phaser.Utils.Array.GetRandom(ELITE_KEYS) : null;
+    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0};
     const tweenDur = isBoss ? 1500 : 900;
     this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
@@ -1049,6 +1061,14 @@ class GameScene extends Phaser.Scene {
       for (let s=-1; s<=1; s+=2) { e.gfx.moveTo(x+s*4, y); e.gfx.lineTo(x+s*7, y+3+bl); }
       e.gfx.strokePath();
     }
+    // Elite halo — pulsing colored ring marks the modifier (rendered above body, below HP bar)
+    if (e.elite) {
+      const m = ELITE_MODS[e.elite];
+      const alpha = 0.55 + Math.sin(time*0.006 + e.legPhase)*0.25;
+      const r = e.type==='broodling' ? 9 : (e.type==='charger' || e.type==='spitter' || e.type==='screamer') ? 20 : 16;
+      e.gfx.lineStyle(2, m.color, alpha);
+      e.gfx.strokeCircle(x, y, r);
+    }
     // HP bar — wider for bosses so the chunky number is readable
     if (e.hp<e.maxHp) {
       const isBoss = e.type==='queen' || e.type==='tyrant' || e.type==='architect';
@@ -1179,9 +1199,19 @@ class GameScene extends Phaser.Scene {
     this.enemies.getChildren().forEach(eg => {
       const e = eg.getData('enemy');
       if (!e||!e.alive) return;
+      // Elite: Speedy multiplier applies to all e.x/e.y motion below; Regen ticks here once a sec.
+      const sM = e.elite === 'speedy' ? ELITE_MODS.speedy.speedMult : 1;
+      if (e.elite === 'regen' && e.hp < e.maxHp) {
+        e.regenTimer -= delta;
+        if (e.regenTimer <= 0) {
+          e.hp = Math.min(e.maxHp, e.hp + ELITE_MODS.regen.hpRegen);
+          e.regenTimer = 1000;
+          this.spawnParticle(e.x, e.y - 6, 0x44ff66, 2);
+        }
+      }
       // Idle wobble — disabled for chargers during telegraph (read aim-lock) and for screamers (they have explicit escape movement)
       const wobbling = e.arrived && !e.diving && !(e.type==='charger' && e.chargeLocked) && e.type !== 'screamer';
-      if (wobbling) { e.wobble+=dt*1.2*e.wobbleDir; e.x+=Math.sin(e.wobble)*30*dt; e.x=Phaser.Math.Clamp(e.x,20,W-20); }
+      if (wobbling) { e.wobble+=dt*1.2*e.wobbleDir; e.x+=Math.sin(e.wobble)*30*sM*dt; e.x=Phaser.Math.Clamp(e.x,20,W-20); }
       if (e.type==='flyer'&&e.arrived&&!e.diving) { e.diveTimer-=delta; if(e.diveTimer<=0){e.diving=true;e.diveSpeed=200+this.wave*15;} }
       if (e.type==='charger'&&e.arrived&&!e.diving) {
         e.diveTimer-=delta;
@@ -1194,8 +1224,8 @@ class GameScene extends Phaser.Scene {
       }
       if (e.diving) {
         if (e.type==='charger') {
-          e.x += Math.cos(e.chargeAngle) * e.diveSpeed * dt;
-          e.y += Math.sin(e.chargeAngle) * e.diveSpeed * dt;
+          e.x += Math.cos(e.chargeAngle) * e.diveSpeed * sM * dt;
+          e.y += Math.sin(e.chargeAngle) * e.diveSpeed * sM * dt;
           if (e.y>H+30||e.y<-50||e.x<-40||e.x>W+40) {
             e.y=-30; e.x=Phaser.Math.Between(50,W-50); e.diving=false;
             e.diveTimer=Phaser.Math.Between(2500,4500); e.arrived=false;
@@ -1203,14 +1233,14 @@ class GameScene extends Phaser.Scene {
             this.tweens.add({targets:e,y:e.targetY,duration:600,ease:'Sine.easeOut',onComplete:()=>{e.arrived=true;}});
           }
         } else {
-          e.y+=e.diveSpeed*dt; e.x+=(e.x<this.shipX?1:-1)*60*dt;
+          e.y+=e.diveSpeed*sM*dt; e.x+=(e.x<this.shipX?1:-1)*60*sM*dt;
           if (e.y>H+30) { e.y=-30; e.x=Phaser.Math.Between(40,W-40); e.diving=false; e.diveTimer=Phaser.Math.Between(2000,4000); e.arrived=false; e.targetY=Phaser.Math.Between(40,180); this.tweens.add({targets:e,y:e.targetY,duration:600,ease:'Sine.easeOut',onComplete:()=>{e.arrived=true;}}); }
         }
       }
       if (e.type==='spitter'&&e.arrived) { e.shootTimer-=delta; if(e.shootTimer<=0){this.fireEnemyBullet(e.x,e.y);e.shootTimer=Phaser.Math.Between(1200,3000-this.wave*50);} }
       // Queen: slow advance + spawn broodlings every 4s. No projectile attack.
       if (e.type==='queen' && e.arrived) {
-        if (e.y < H - 220) e.y += 10 * dt;
+        if (e.y < H - 220) e.y += 10 * sM * dt;
         e.spawnTimer -= delta;
         if (e.spawnTimer <= 0) {
           const bx = e.x + Phaser.Math.Between(-25, 25);
@@ -1278,15 +1308,15 @@ class GameScene extends Phaser.Scene {
       }
       // Broodlings: feral, drift toward player constantly once arrived
       if (e.type==='broodling' && e.arrived) {
-        e.y += 36 * dt;
-        e.x += (e.x < this.shipX ? 1 : -1) * 22 * dt;
+        e.y += 36 * sM * dt;
+        e.x += (e.x < this.shipX ? 1 : -1) * 22 * sM * dt;
       }
       // Screamer: runs AWAY from player toward map edge. If it escapes (off-side or 12s timer),
       // unleashes a scream that spawns 5 broodlings — DPS race or pay later.
       if (e.type==='screamer' && e.arrived) {
         e.escapeTimer -= delta;
         const dir = e.x > this.shipX ? 1 : -1;
-        e.x += dir * 80 * dt;
+        e.x += dir * 80 * sM * dt;
         if (e.x < 12 || e.x > W-12 || e.escapeTimer <= 0) {
           // Scream → 5 broodlings + camera shake + sound
           for (let i = 0; i < 5; i++) {
@@ -1307,10 +1337,11 @@ class GameScene extends Phaser.Scene {
       }
       if (e.arrived||e.diving) {
         if (Phaser.Math.Distance.Between(e.x,e.y,this.shipX,this.shipY)<22) {
-          // Contact damage scales by threat: charger ram 2x, boss 3x, others 1x
+          // Contact damage scales by threat: charger ram 2x, boss 3x, others 1x; Berserk elites 1.5x on top
           const baseDmg = 3 + this.wave;
           const isBossType = e.type==='queen' || e.type==='tyrant' || e.type==='architect';
-          const dmg = e.type==='charger' ? baseDmg*2 : isBossType ? baseDmg*3 : baseDmg;
+          const eliteDmgMult = e.elite === 'berserk' ? ELITE_MODS.berserk.dmgMult : 1;
+          const dmg = (e.type==='charger' ? baseDmg*2 : isBossType ? baseDmg*3 : baseDmg) * eliteDmgMult;
           this.takeDamage(dmg);
           // Bosses survive contact; others die on touch
           if (!isBossType) {

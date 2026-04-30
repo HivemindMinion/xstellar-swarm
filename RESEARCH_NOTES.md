@@ -40,7 +40,7 @@ Each loop iteration:
 - [ ] **v21: Burrower enemy** — 2s underground (invuln), emerges adjacent to player with telegraph ring 0.5s before.
 - [ ] **v22: Carrier enemy** — drops 1 egg every 5s as it moves; eggs hatch into broodlings (1 HP, fast) after 2s.
 - [ ] **v23: Shielder/Resonator support orbits** — non-attacking enemies that grant nearby bugs +damage or HP regen aura. Forces target-priority decisions.
-- [ ] **v24: Elite modifiers** — 5% chance per enemy to roll one elite mod (Berserk +50% dmg, Shielded HP shield, Speedy +30% move, Regen +1 HP/s). Visual tag (colored outline). Drops 2x XP.
+- [x] **v19: Elite modifiers** — shipped. 6% roll on regular enemies wave 4+; 3 mods (Berserk +50% contact dmg, Speedy +40% move, Regen +1 HP/s). Pulsing colored halo marks the mod. 2x XP on kill. Shielded mod deferred.
 
 ### Skip / defer (scope creep — Connor flagged "depth ≠ complexity")
 
