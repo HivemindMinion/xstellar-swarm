@@ -21,7 +21,7 @@ Each loop iteration:
 - [x] **v16: PER also reduces special CD** — shipped. -0.5% per PER point, cap 30%. Same stat already gives crit chance, so PER becomes the dual-purpose "perception/focus" build identity. No new stat slot needed.
 - [x] **v10: Charger enemy (wave 4+)** — shipped. Telegraphed 800ms aim-lock + sprint at locked angle, 2x contact dmg.
 - [x] **v11: Acid pools from Spitter** — shipped. Missed enemy bullets puddle at the wall surface, 4s life, 2 dmg per 0.5s tick if player overlaps.
-- [ ] **v11: Screamer enemy** — runs AWAY from player toward map edge; if reaches edge or survives 12s, spawns +5 mini-crawlers as bonus wave. DPS-race target. Inverts the "always advance toward you" reflex.
+- [x] **v17: Screamer enemy** — shipped. Wave 6+, 10% spawn weight. Runs away from player; if escapes (off-side or 12s), screams 5 broodlings + camera shake.
 
 ### Boss waves — every 5th wave
 - [x] **v13: Mini-Queen boss (every 5th wave)** — shipped. Queen + 4 supporting crawlers; Queen advances slowly, spawns broodlings every 4s, 60+wave*8 HP, 80 XP, 3x contact damage. Pink-flash + slow-mo + level-up sting on death.

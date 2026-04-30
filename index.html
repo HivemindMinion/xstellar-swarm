@@ -30,6 +30,7 @@
 //  v14: Brood Tyrant boss (wave 10/20/30 alternates with Queen)
 //  v15: Hive Architect boss (wave 15) — round-robin Q→T→A boss cycle
 //  v16: PER also -0.5% special CD/pt (caster build identity)
+//  v17: Screamer enemy — runs AWAY, screams broodlings if it escapes
 // ============================================================
 
 const W = 480, H = 720;
@@ -406,7 +407,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v16.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v17.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -817,6 +818,7 @@ class GameScene extends Phaser.Scene {
         if (this.wave>=3&&Math.random()<0.25) type='flyer';
         if (this.wave>=4&&Math.random()<0.18) type='charger';
         if (this.wave>=5&&Math.random()<0.15) type='spitter';
+        if (this.wave>=6&&Math.random()<0.10) type='screamer';
         this.spawnEnemy(ex,ey,ty,type,spawned*70); spawned++;
       }
     }
@@ -852,16 +854,16 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnEnemy(x,startY,targetY,type,delay) {
-    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a,tyrant:0x6a1144,eggsac:0x4a0a22,architect:0x8a6a1a};
-    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1,tyrant:100+this.wave*10,eggsac:4,architect:80+this.wave*9};
-    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5,tyrant:120,eggsac:6,architect:100};
+    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a,tyrant:0x6a1144,eggsac:0x4a0a22,architect:0x8a6a1a,screamer:0xddcc66};
+    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1,tyrant:100+this.wave*10,eggsac:4,architect:80+this.wave*9,screamer:5+this.wave};
+    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5,tyrant:120,eggsac:6,architect:100,screamer:18};
     const isBoss = type==='queen' || type==='tyrant' || type==='architect';
     const g = this.add.graphics().setDepth(isBoss?12:10);
     let initSpawnTimer = 0;
     if (type==='queen') initSpawnTimer = 4000;
     if (type==='tyrant') initSpawnTimer = 5000;
     if (type==='architect') initSpawnTimer = 3500;
-    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1};
+    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0};
     const tweenDur = isBoss ? 1500 : 900;
     this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
@@ -1006,6 +1008,35 @@ class GameScene extends Phaser.Scene {
         e.gfx.moveTo(x+3, y-7); e.gfx.lineTo(x+5, y+6);
         e.gfx.strokePath();
       }
+    } else if (e.type==='screamer') {
+      // Bulbous body with oversized vocal chamber and panicked eyes
+      const mouthOpen = 4 + Math.sin(time*0.022)*2.5;
+      const ePulse = 0.55 + Math.sin(time*0.015)*0.3;
+      // Body
+      e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 22, 16);
+      e.gfx.fillStyle(0x9a8a30, 0.5); e.gfx.fillEllipse(x, y, 18, 12);
+      // Cheek bulges (vocal chambers, pulse with timer)
+      e.gfx.fillStyle(e.color, ePulse); e.gfx.fillCircle(x-10, y, 4); e.gfx.fillCircle(x+10, y, 4);
+      // Open mouth (red glowing throat)
+      e.gfx.fillStyle(0x880000, 1); e.gfx.fillEllipse(x, y+3, 12, mouthOpen+4);
+      e.gfx.fillStyle(0xff2222, 0.75); e.gfx.fillEllipse(x, y+3, 9, mouthOpen+2);
+      // Tiny panicked eyes
+      e.gfx.fillStyle(0xffffff, 0.95); e.gfx.fillCircle(x-4, y-5, 2.2); e.gfx.fillCircle(x+4, y-5, 2.2);
+      e.gfx.fillStyle(0x0a0a0a, 1); e.gfx.fillCircle(x-4, y-5, 1.2); e.gfx.fillCircle(x+4, y-5, 1.2);
+      // Flailing legs
+      const sLo = Math.sin(time*0.022 + e.legPhase)*4;
+      e.gfx.lineStyle(1, 0x6a5510, 0.9);
+      for (let s=-1; s<=1; s+=2) {
+        e.gfx.moveTo(x+s*8, y+4); e.gfx.lineTo(x+s*12, y+10+sLo);
+        e.gfx.moveTo(x+s*8, y+8); e.gfx.lineTo(x+s*13, y+12-sLo);
+      }
+      e.gfx.strokePath();
+      // Urgency ring in last 3s of escapeTimer
+      if (e.escapeTimer < 3000 && e.escapeTimer > 0) {
+        const t = 1 - e.escapeTimer / 3000;
+        e.gfx.lineStyle(1, 0xffff66, 0.3 + t*0.5);
+        e.gfx.strokeCircle(x, y, 14 + t*6);
+      }
     } else if (e.type==='broodling') {
       const bl = Math.sin(time*0.012+e.legPhase)*1.5;
       e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 11, 7);
@@ -1145,8 +1176,8 @@ class GameScene extends Phaser.Scene {
     this.enemies.getChildren().forEach(eg => {
       const e = eg.getData('enemy');
       if (!e||!e.alive) return;
-      // Idle wobble (chargers freeze during telegraph for clearer aim-lock readability)
-      const wobbling = e.arrived && !e.diving && !(e.type==='charger' && e.chargeLocked);
+      // Idle wobble — disabled for chargers during telegraph (read aim-lock) and for screamers (they have explicit escape movement)
+      const wobbling = e.arrived && !e.diving && !(e.type==='charger' && e.chargeLocked) && e.type !== 'screamer';
       if (wobbling) { e.wobble+=dt*1.2*e.wobbleDir; e.x+=Math.sin(e.wobble)*30*dt; e.x=Phaser.Math.Clamp(e.x,20,W-20); }
       if (e.type==='flyer'&&e.arrived&&!e.diving) { e.diveTimer-=delta; if(e.diveTimer<=0){e.diving=true;e.diveSpeed=200+this.wave*15;} }
       if (e.type==='charger'&&e.arrived&&!e.diving) {
@@ -1246,6 +1277,26 @@ class GameScene extends Phaser.Scene {
       if (e.type==='broodling' && e.arrived) {
         e.y += 36 * dt;
         e.x += (e.x < this.shipX ? 1 : -1) * 22 * dt;
+      }
+      // Screamer: runs AWAY from player toward map edge. If it escapes (off-side or 12s timer),
+      // unleashes a scream that spawns 5 broodlings — DPS race or pay later.
+      if (e.type==='screamer' && e.arrived) {
+        e.escapeTimer -= delta;
+        const dir = e.x > this.shipX ? 1 : -1;
+        e.x += dir * 80 * dt;
+        if (e.x < 12 || e.x > W-12 || e.escapeTimer <= 0) {
+          // Scream → 5 broodlings + camera shake + sound
+          for (let i = 0; i < 5; i++) {
+            const sx = Phaser.Math.Clamp(e.x + Phaser.Math.Between(-40, 40), 30, W-30);
+            this.spawnEnemy(sx, 50, 70 + i*8, 'broodling', i*120);
+            this.enemiesRemaining++;
+          }
+          this.spawnParticle(e.x, e.y, 0xffff66, 18);
+          this.spawnParticle(e.x, e.y, 0xffaa22, 8);
+          this.cameras.main.shake(220, 0.005);
+          SFX.death(); // ominous; the scream echoes
+          e.alive = false; e.gfx.clear(); this.enemiesRemaining--;
+        }
       }
       // Despawn enemies that fall off the bottom (broodlings escape past wall)
       if (e.y > H + 30 && e.type !== 'flyer' && e.type !== 'charger') {
