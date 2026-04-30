@@ -6,6 +6,17 @@ The latest version is always at the top.
 
 ---
 
+## v28 — Wave announcement timing polish
+
+### Changed
+- **Wave / Band / Flavor / Boss announcements fade much faster.** Old durations (1.8–2.6s visible) meant text stayed on screen well into active gameplay; playtest screenshots showed "Below the Crypt" + "Wave 4" + flavor line still visible while the player had a 25× combo and 30 kills. New durations (≈0.9–1.3s visible) flash dramatically, then get out of the way.
+  - Band: delay 1700→700ms, fade 900→400ms
+  - Boss: delay 1500→800ms, fade 1000→500ms
+  - Wave + flavor: delay 1200→500ms, fade 600→400ms
+- Announcement positions shifted up ~20–30px (Boss `y/2-180`, Band `y/2-150`, Wave `y/2-110`, Flavor `y/2-72`) so the title flash sits above the formation rows instead of slicing through them.
+
+---
+
 ## v27 — Performance pass: damage-number pool, per-frame caches
 
 ### Changed
