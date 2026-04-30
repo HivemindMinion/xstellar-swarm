@@ -6,6 +6,15 @@ The latest version is always at the top.
 
 ---
 
+## v29 — Red damage numbers when the player takes a hit
+
+### Added
+- Every successful hit on the player now spawns a red `-N` floater that rises and fades from the player's position over 700ms. Closes the feedback loop with v26 (enemy damage numbers): you see what you deal, you see what you take.
+- Reuses the v27 dmgPool — no extra allocation per hit.
+- Number reflects post-Armor damage (the actual HP delta), not the raw incoming amount, so investing in Armor visibly shows up as smaller red numbers.
+
+---
+
 ## v28 — Wave announcement timing polish
 
 ### Changed

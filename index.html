@@ -42,6 +42,7 @@
 //  v26: floating damage numbers — every hit pops, crits gold and big
 //  v27: perf pass — dmg-number pool, per-frame shielder cache, cached stats
 //  v28: announcement timing — clear text faster, less overlap with gameplay
+//  v29: red damage numbers when the player takes a hit
 // ============================================================
 
 const W = 480, H = 720;
@@ -450,7 +451,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v28.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v29.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -815,6 +816,34 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  spawnPlayerHurt(amount) {
+    // Red "-N" floats up from the player on every hit. Pulls from the same dmgPool as v26 numbers.
+    let slot = this.dmgPool.find(s => !s.used);
+    if (!slot) {
+      slot = this.dmgPool[0];
+      for (let i = 1; i < this.dmgPool.length; i++) {
+        if (this.dmgPool[i].until < slot.until) slot = this.dmgPool[i];
+      }
+      this.tweens.killTweensOf(slot.obj);
+    }
+    slot.used = true;
+    const t = slot.obj;
+    const n = Math.round(amount * 10) / 10;
+    t.setText(`-${n}`);
+    t.setFontSize(15);
+    t.setColor('#ff4444');
+    t.setStroke('#1a0a00', 2);
+    const startY = this.shipY - 28;
+    t.setPosition(this.shipX + Phaser.Math.Between(-8, 8), startY);
+    t.setAlpha(1).setVisible(true);
+    slot.until = this.time.now + 700;
+    this.tweens.add({
+      targets: t, y: startY - 30, alpha: 0,
+      duration: 700, ease: 'Cubic.easeOut',
+      onComplete: () => { slot.used = false; t.setVisible(false); }
+    });
+  }
+
   spawnAcidPool(x, y) {
     // Cap visible pools — drop oldest so the wall doesn't accumulate green carpet
     while (this.acidPools.length >= 6) {
@@ -833,9 +862,11 @@ class GameScene extends Phaser.Scene {
   takeDamage(amount) {
     if (this.invincible > 0) return;
     if (this.shieldWallActive > 0) { this.spawnParticle(this.shipX,this.shipY,0x8ca8cc,4); return; }
-    this.hp -= amount * (1 - getArmor());
+    const dealt = amount * (1 - getArmor());
+    this.hp -= dealt;
     this.invincible = 0.8; this.shakeTime = 0.15;
     this.spawnParticle(this.shipX,this.shipY,0xcc3333,8);
+    this.spawnPlayerHurt(dealt);
     this.updateHUD(); // refresh HP bar on every hit, not just on death
 
     if (this.hp <= 0) {
