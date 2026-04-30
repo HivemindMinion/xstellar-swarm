@@ -6,6 +6,19 @@ The latest version is always at the top.
 
 ---
 
+## v25 — Wave-transition polish, charger respawn fix, hazard cleanup
+
+### Fixed
+- **"BOSS" announcement bleeding into the next wave's "Wave N" text.** When a player burst-killed wave 5 in under 2.5s, wave 5's BOSS / band / wave-name texts were still tweening when wave 6's startWave fired and stacked its own announcements on top. New waves now destroy any leftover announcement text objects from the previous wave (`this.waveAnnouncements` array tracked across `startWave` calls).
+- **Chargers respawning into the SKY after diving off-screen.** Charger respawn used the original sky target (`Phaser.Math.Between(50, 160)`), but in v23 chargers became a ground type. They now respawn into the field (`Phaser.Math.Between(240, 360)`) so they crawl back into formation rather than reappearing 60px below the wave-name banner.
+
+### Changed
+- **Acid pool cap.** Spitter misses no longer pile up indefinitely — when 6 pools are already on the wall, the oldest is destroyed before the new one spawns. Keeps the wall readable instead of a continuous green carpet.
+- **Wave-end hazard reset.** Previous wave's acid pools, in-flight enemy bullets, and Mage Nova rings are now wiped on wave-clear so the next wave starts visually clean. (Player bullets and particles are short-lived enough to leave alone.)
+- **Stronger ground perspective.** `groundPerspective(y)` now maps `y ∈ [200, 620]` to scale `[0.30, 1.30]` (was `[0.45, 1.20]`) clamped to `[0.25, 1.30]`. Makes "small on the horizon → big at the wall" much more readable as a depth cue: ~3× scale change across the field instead of 1.7×.
+
+---
+
 ## v24 — Bug fixes: wave chain-firing, lingering corpses, and ground perspective
 
 ### Fixed
