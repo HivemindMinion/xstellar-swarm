@@ -4,3 +4,7 @@ Thumbs.db
 node_modules/
 .env
 .claude/
+# Local-only working docs — public changelog lives in PATCH_NOTES.md
+HANDOFF.md
+RESEARCH_NOTES.md
+LOOP_LOG.md
