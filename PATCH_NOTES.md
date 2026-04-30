@@ -6,6 +6,16 @@ The latest version is always at the top.
 
 ---
 
+## v22 — QoL pass: HP bar refresh, specials unlocked at start, combo carries between waves
+
+### Changed
+- **HP bar now refreshes on every hit.** `takeDamage()` was only calling `updateHUD()` on death, so mid-fight damage didn't update the bar visually. Single-line fix.
+- **Starting class's mastery is now unlocked at character creation** (level 1 of the matching spec, `activeSpecial` set automatically). Previously the player couldn't use right-click until they earned a stat point on level-up, died, and spent the point in the LevelUpScene — typically several waves of waiting. New characters now have their right-click special available from wave 1.
+- **Inter-wave timing tightened so an active combo can survive into the next wave.** Wave-end → next-wave-start gap reduced from 1500ms → 150ms. Spawn delay inside `startWave` reduced from 800ms → 250ms. Total time before new enemies are hittable is ~400ms (well inside the 2s combo timer).
+- Wave-complete check is unchanged in logic — wave still only ends when `enemiesRemaining` reaches zero, which already counts every dynamically-spawned enemy (broodlings from Queen, broodlings from Screamer scream, Architect teleport-spawns, eggsacs from Tyrant) thanks to existing increment/decrement pairs.
+
+---
+
 ## v21 — Shielder + Resonator support enemies
 
 ### Added
