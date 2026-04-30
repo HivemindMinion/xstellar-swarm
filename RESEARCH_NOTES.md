@@ -25,7 +25,7 @@ Each loop iteration:
 
 ### Boss waves — every 5th wave
 - [x] **v13: Mini-Queen boss (every 5th wave)** — shipped. Queen + 4 supporting crawlers; Queen advances slowly, spawns broodlings every 4s, 60+wave*8 HP, 80 XP, 3x contact damage. Pink-flash + slow-mo + level-up sting on death.
-- [ ] **v13: Brood Tyrant boss (wave 10)** — armored, periodically lays 3 egg sacs; sacs hatch into mini-crawlers after 3s telegraph. Kill sacs early to thin the swarm.
+- [x] **v14: Brood Tyrant boss (wave 10/20/30)** — shipped. Stationary, 100+wave*10 HP, lays 3 sacs every 8s; sacs hatch into broodlings after 3s. Kill sacs early to skip broodlings. Alternates with Queen on /5 wave cadence.
 - [ ] **v14: Hive Architect boss (wave 15)** — doesn't attack; teleports between 3 anchor points each spawning 2 enemies on arrival. Mid-battle spawner. Force focus-fire vs. cleared minions.
 
 ### Polish & feel — high-impact, low-risk
