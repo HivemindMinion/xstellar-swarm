@@ -6,6 +6,19 @@ The latest version is always at the top.
 
 ---
 
+## v26 — Floating damage numbers
+
+### Added
+- Every bullet hit now spawns a damage-number text that rises and fades over ~550ms (~750ms for crits). Numbers are jittered ±6px on spawn so two simultaneous Pierce hits don't perfectly overlap.
+- Crits render distinctly: 20px gold italic with `!` suffix and a longer rise; normal hits are 13px white italic. Both stroked black for readability against the field/sky.
+- Numbers are rounded to one decimal so Haste-penalty fractional damage (e.g. 3.5) reads correctly without showing 3.4999.
+
+### Changed
+- The classic "make every shot satisfying" feel pass. Synergizes with v7 (crits exist), v9 (crit hit-stop + camera flash), and v6 (combo pierce) — every Pierce-III crit now pops 3 gold `!` numbers in slow-mo.
+- Mage Arcane Nova still uses the existing single particle burst per hit; AoE numbers would clutter the screen with one button press, kept the ring effect instead.
+
+---
+
 ## v25 — Wave-transition polish, charger respawn fix, hazard cleanup
 
 ### Fixed

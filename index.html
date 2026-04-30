@@ -39,6 +39,7 @@
 //  v23: sprite swap for 12 enemy types + ground-bug formations land in field
 //  v24: bug fixes — wave-chain, lingering corpses, perspective scaling
 //  v25: polish — pool cap, slower stagger, wider rows, wave hazard cleanup
+//  v26: floating damage numbers — every hit pops, crits gold and big
 // ============================================================
 
 const W = 480, H = 720;
@@ -447,7 +448,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v25.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v26.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -782,6 +783,23 @@ class GameScene extends Phaser.Scene {
           Phaser.Math.Distance.Between(e.x, e.y, s.x, s.y) < 60) return true;
     }
     return false;
+  }
+
+  spawnDmgNumber(x, y, amount, isCrit) {
+    // Floating damage indicator — rises and fades. Crits gold-and-large for impact.
+    const n = Math.round(amount * 10) / 10;
+    const txt = this.add.text(x + Phaser.Math.Between(-6, 6), y - 6, isCrit ? `${n}!` : `${n}`, {
+      fontSize: isCrit ? '20px' : '13px',
+      fontFamily: 'serif',
+      color: isCrit ? '#ffe066' : '#ffffff',
+      stroke: '#1a0a00', strokeThickness: isCrit ? 3 : 2,
+      fontStyle: 'italic'
+    }).setOrigin(0.5).setDepth(28);
+    this.tweens.add({
+      targets: txt, y: y - (isCrit ? 38 : 28), alpha: 0,
+      duration: isCrit ? 750 : 550, ease: 'Cubic.easeOut',
+      onComplete: () => txt.destroy()
+    });
   }
 
   spawnAcidPool(x, y) {
@@ -1320,6 +1338,7 @@ class GameScene extends Phaser.Scene {
           e.hp -= dmg;
           if (isCrit) { this.spawnParticle(e.x,e.y,0xffe066,8); this.spawnParticle(e.x,e.y-4,0xffffff,3); SFX.crit(); }
           else { this.spawnParticle(e.x,e.y,e.color,3); SFX.hit(); }
+          this.spawnDmgNumber(e.x, e.y, dmg, isCrit);
           if (e.hp<=0) {
             e.alive=false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6);
             e.gfx.clear(); this.kills++; this.enemiesRemaining--;
