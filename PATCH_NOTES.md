@@ -6,6 +6,16 @@ The latest version is always at the top.
 
 ---
 
+## v30 — Pause menu (P / Esc)
+
+### Added
+- **P** or **Esc** toggles a full pause: enemies, bullets, pools, particles, charger telegraphs, queen advance, charger sprints — everything freezes mid-frame. The pause flag short-circuits `update()`, so it's a true freeze with zero ongoing simulation cost.
+- A semi-transparent veil over the play area with **PAUSED** centered and a "Press P or Esc to resume" hint underneath.
+- Tab special-swap and right-click special activation are gated on `!gamePaused` so the menu can't be exploited mid-pause.
+- Title screen control hint updated: `Left Click: Attack ◆ Right Click: Special / WASD / Arrows: Move ◆ Tab: Swap Special ◆ P / Esc: Pause`.
+
+---
+
 ## v29 — Red damage numbers when the player takes a hit
 
 ### Added
