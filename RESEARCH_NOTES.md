@@ -20,7 +20,7 @@ Each loop iteration:
 - [x] **v7: Crit chance + crit damage** — shipped. PER + LUK stats, crit kills jump combo by 2.
 - [ ] **v8: Cooldown reduction stat** — Wisdom-style. Either extend Haste (specials -3% CD/pt, cap 60%) or add new stat. Cleanest: Haste already has tradeoff; piggyback there. Specials feel reactive, not hoarded.
 - [x] **v10: Charger enemy (wave 4+)** — shipped. Telegraphed 800ms aim-lock + sprint at locked angle, 2x contact dmg.
-- [ ] **v10: Acid pools from Spitter** — when Spitter shoots, also drops a green pool at its target spot lasting 4s, ticking 1 dmg/0.5s if player stands in it. Stateless graphics object array, like particles. Adds positioning layer.
+- [x] **v11: Acid pools from Spitter** — shipped. Missed enemy bullets puddle at the wall surface, 4s life, 2 dmg per 0.5s tick if player overlaps.
 - [ ] **v11: Screamer enemy** — runs AWAY from player toward map edge; if reaches edge or survives 12s, spawns +5 mini-crawlers as bonus wave. DPS-race target. Inverts the "always advance toward you" reflex.
 
 ### Boss waves — every 5th wave
