@@ -26,6 +26,7 @@
 //  v10: Charger enemy (wave 4+) — telegraphed sprint at player
 //  v11: Spitter acid pools — persistent ground hazard on missed shots
 //  v12: procedural SFX via Tone.js (fire/hit/crit/kill/wave/...)
+//  v13: Mini-Queen boss wave (every 5th wave) + Broodlings
 // ============================================================
 
 const W = 480, H = 720;
@@ -400,7 +401,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v12.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v13.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -780,11 +781,16 @@ class GameScene extends Phaser.Scene {
 
     const band = getWaveBand(this.wave);
     const isBandStart = WAVE_BANDS.some(b => b.from === this.wave);
+    const isBoss = this.wave % 5 === 0;
 
     // Band entry: extra title above the wave count, lingers a beat longer
     if (isBandStart) {
       const bandTxt = this.add.text(W/2,H/2-130,`~ ${band.name} ~`,{fontSize:'20px',fontFamily:'serif',color:'#a89070',fontStyle:'italic'}).setOrigin(0.5).setDepth(101);
       this.tweens.add({targets:bandTxt,alpha:0,duration:900,delay:1700,onComplete:()=>bandTxt.destroy()});
+    }
+    if (isBoss) {
+      const bossTxt = this.add.text(W/2,H/2-160,'— B O S S —',{fontSize:'22px',fontFamily:'serif',color:'#ff4466',stroke:'#3a0000',strokeThickness:3,fontStyle:'italic'}).setOrigin(0.5).setDepth(102);
+      this.tweens.add({targets:bossTxt,alpha:0,duration:1000,delay:1500,onComplete:()=>bossTxt.destroy()});
     }
 
     const announce = this.add.text(W/2,H/2-80,`Wave ${this.wave}`,{fontSize:'32px',fontFamily:'serif',color:PAL.accent,stroke:'#1a1408',strokeThickness:3,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
@@ -797,6 +803,7 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnWaveEnemies() {
+    if (this.wave % 5 === 0) { this.spawnBossWave(); return; }
     const count = 6+this.wave*2, rows = Math.ceil(count/8), cols = Math.min(count,8);
     let spawned = 0;
     for (let r = 0; r < rows && spawned < count; r++) {
@@ -813,13 +820,23 @@ class GameScene extends Phaser.Scene {
     this.enemiesRemaining = spawned;
   }
 
+  spawnBossWave() {
+    // Wave 5: Mini-Queen + 4 supporting crawlers
+    // Future waves (10, 15, ...) will add more boss kinds. For now, all multiples of 5 get the queen.
+    this.spawnEnemy(W/2, -60, 90, 'queen', 0);
+    const supportXs = [80, 160, W-160, W-80];
+    supportXs.forEach((sx, i) => this.spawnEnemy(sx, -30-i*30, 50+i*15, 'crawler', 400 + i*200));
+    this.enemiesRemaining = 1 + supportXs.length;
+  }
+
   spawnEnemy(x,startY,targetY,type,delay) {
-    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a};
-    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5)};
-    const xpMap={crawler:8,flyer:12,spitter:15,charger:14};
-    const g = this.add.graphics().setDepth(10);
-    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false};
-    this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:900,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
+    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a};
+    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1};
+    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5};
+    const g = this.add.graphics().setDepth(type==='queen'?12:10);
+    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:type==='queen'?4000:0};
+    const tweenDur = type==='queen' ? 1500 : 900;
+    this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
   }
 
@@ -877,8 +894,46 @@ class GameScene extends Phaser.Scene {
         e.gfx.moveTo(x,y); e.gfx.lineTo(x+Math.cos(e.chargeAngle)*60, y+Math.sin(e.chargeAngle)*60);
         e.gfx.strokePath();
       }
+    } else if (e.type==='queen') {
+      const ql = Math.sin(time*0.005)*4, ePulse = 0.4 + Math.sin(time*0.003)*0.18;
+      // Abdomen (egg sac, glowing)
+      e.gfx.fillStyle(0xff66cc, ePulse); e.gfx.fillEllipse(x, y+22, 28, 16);
+      e.gfx.fillStyle(0x6a0a2a, 0.5); e.gfx.fillEllipse(x, y+22, 22, 10);
+      // Body
+      e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 38, 26);
+      e.gfx.fillStyle(0x6a0a2a, 0.6); e.gfx.fillEllipse(x, y-2, 30, 18);
+      // Crown crest (3 gold spikes)
+      e.gfx.fillStyle(PAL.gold, 0.9);
+      e.gfx.fillTriangle(x-9, y-13, x-5, y-23, x-1, y-13);
+      e.gfx.fillTriangle(x-2, y-13, x, y-28, x+2, y-13);
+      e.gfx.fillTriangle(x+1, y-13, x+5, y-23, x+9, y-13);
+      // Multi-eyes (red, predator)
+      e.gfx.fillStyle(0xff2266, 1);
+      e.gfx.fillCircle(x-8, y-3, 2.8); e.gfx.fillCircle(x+8, y-3, 2.8);
+      e.gfx.fillCircle(x-4, y+3, 1.6); e.gfx.fillCircle(x+4, y+3, 1.6);
+      // Blade limbs (4)
+      e.gfx.lineStyle(3, 0x4a0a22, 0.95);
+      for (let s=-1; s<=1; s+=2) {
+        e.gfx.moveTo(x+s*17, y-6); e.gfx.lineTo(x+s*28, y-12+ql);
+        e.gfx.moveTo(x+s*17, y+4); e.gfx.lineTo(x+s*28, y+10-ql);
+      }
+      e.gfx.strokePath();
+    } else if (e.type==='broodling') {
+      const bl = Math.sin(time*0.012+e.legPhase)*1.5;
+      e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 11, 7);
+      e.gfx.fillStyle(0x2a4a08, 1); e.gfx.fillCircle(x, y+4, 3.5);
+      e.gfx.fillStyle(0xff4444, 0.9); e.gfx.fillCircle(x-1.2, y+4, 1.2); e.gfx.fillCircle(x+1.2, y+4, 1.2);
+      e.gfx.lineStyle(1, e.color, 0.9);
+      for (let s=-1; s<=1; s+=2) { e.gfx.moveTo(x+s*4, y); e.gfx.lineTo(x+s*7, y+3+bl); }
+      e.gfx.strokePath();
     }
-    if (e.hp<e.maxHp) { e.gfx.fillStyle(0x1a1a1a,0.8); e.gfx.fillRect(x-12,y-22,24,3); e.gfx.fillStyle(0xcc2222,1); e.gfx.fillRect(x-12,y-22,24*(e.hp/e.maxHp),3); }
+    // HP bar — wider for queen so the chunky number is readable
+    if (e.hp<e.maxHp) {
+      const bw = e.type==='queen' ? 40 : 24;
+      const by = e.type==='queen' ? y-30 : y-22;
+      e.gfx.fillStyle(0x1a1a1a,0.8); e.gfx.fillRect(x-bw/2,by,bw,3);
+      e.gfx.fillStyle(0xcc2222,1); e.gfx.fillRect(x-bw/2,by,bw*(e.hp/e.maxHp),3);
+    }
   }
 
   update(time, delta) {
@@ -963,6 +1018,14 @@ class GameScene extends Phaser.Scene {
               this.cameras.main.flash(60, 255, 230, 110, false);
               this.hitStop = Math.max(this.hitStop, 70);
             }
+            // Boss death: bigger sensory payoff regardless of crit
+            if (e.type === 'queen') {
+              this.spawnParticle(e.x, e.y, 0xff66cc, 20);
+              this.spawnParticle(e.x, e.y, PAL.gold, 10);
+              this.cameras.main.flash(180, 255, 100, 180, false);
+              this.hitStop = Math.max(this.hitStop, 140);
+              SFX.levelUp(); // celebratory sting on top of kill
+            }
             this.gainXP(e.xpValue, isCrit ? 2 : 1);
           }
           const remaining = b.getData('pierce') || 0;
@@ -1019,12 +1082,42 @@ class GameScene extends Phaser.Scene {
         }
       }
       if (e.type==='spitter'&&e.arrived) { e.shootTimer-=delta; if(e.shootTimer<=0){this.fireEnemyBullet(e.x,e.y);e.shootTimer=Phaser.Math.Between(1200,3000-this.wave*50);} }
+      // Queen: slow advance + spawn broodlings every 4s. No projectile attack.
+      if (e.type==='queen' && e.arrived) {
+        if (e.y < H - 220) e.y += 10 * dt;
+        e.spawnTimer -= delta;
+        if (e.spawnTimer <= 0) {
+          const bx = e.x + Phaser.Math.Between(-25, 25);
+          const by = e.y + 18;
+          this.spawnEnemy(bx, by, by + 20, 'broodling', 0);
+          this.enemiesRemaining++;
+          e.spawnTimer = 4000;
+          this.spawnParticle(e.x, e.y+18, 0xff66cc, 6);
+          SFX.hit();
+        }
+      }
+      // Broodlings: feral, drift toward player constantly once arrived
+      if (e.type==='broodling' && e.arrived) {
+        e.y += 36 * dt;
+        e.x += (e.x < this.shipX ? 1 : -1) * 22 * dt;
+      }
+      // Despawn enemies that fall off the bottom (broodlings escape past wall)
+      if (e.y > H + 30 && e.type !== 'flyer' && e.type !== 'charger') {
+        e.alive = false; e.gfx.clear(); this.enemiesRemaining--;
+      }
       if (e.arrived||e.diving) {
         if (Phaser.Math.Distance.Between(e.x,e.y,this.shipX,this.shipY)<22) {
-          // Charger ram is the threat — 2x contact damage
-          const dmg = e.type==='charger' ? (3+this.wave)*2 : 3+this.wave;
-          this.takeDamage(dmg); e.hp=-999; e.alive=false;
-          this.spawnParticle(e.x,e.y,e.color,10); e.gfx.clear(); this.enemiesRemaining--;
+          // Contact damage scales by threat: charger ram 2x, queen 3x, others 1x
+          const baseDmg = 3 + this.wave;
+          const dmg = e.type==='charger' ? baseDmg*2 : e.type==='queen' ? baseDmg*3 : baseDmg;
+          this.takeDamage(dmg);
+          // Queen survives contact (she's the boss); others die on touch
+          if (e.type !== 'queen') {
+            e.hp=-999; e.alive=false;
+            this.spawnParticle(e.x,e.y,e.color,10); e.gfx.clear(); this.enemiesRemaining--;
+          } else {
+            this.spawnParticle(this.shipX, this.shipY, 0xff66cc, 8);
+          }
         }
       }
       this.drawEnemy(e, time);

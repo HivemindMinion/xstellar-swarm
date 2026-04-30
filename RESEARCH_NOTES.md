@@ -24,7 +24,7 @@ Each loop iteration:
 - [ ] **v11: Screamer enemy** — runs AWAY from player toward map edge; if reaches edge or survives 12s, spawns +5 mini-crawlers as bonus wave. DPS-race target. Inverts the "always advance toward you" reflex.
 
 ### Boss waves — every 5th wave
-- [ ] **v12: Mini-Queen boss (wave 5)** — beefy crawler-shape, 8x HP, slow advance, every 4s spawns 1 broodling. On death: drops 30 XP burst.
+- [x] **v13: Mini-Queen boss (every 5th wave)** — shipped. Queen + 4 supporting crawlers; Queen advances slowly, spawns broodlings every 4s, 60+wave*8 HP, 80 XP, 3x contact damage. Pink-flash + slow-mo + level-up sting on death.
 - [ ] **v13: Brood Tyrant boss (wave 10)** — armored, periodically lays 3 egg sacs; sacs hatch into mini-crawlers after 3s telegraph. Kill sacs early to thin the swarm.
 - [ ] **v14: Hive Architect boss (wave 15)** — doesn't attack; teleports between 3 anchor points each spawning 2 enemies on arrival. Mid-battle spawner. Force focus-fire vs. cleared minions.
 
