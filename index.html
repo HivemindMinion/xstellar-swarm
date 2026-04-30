@@ -19,6 +19,8 @@
 //  Humans vs. Bugs — Defend the Keep
 //  v7: crit chance + crit damage (Perception, Luck)
 //      crit kills accelerate the v6 combo pierce ladder
+//  v8: wave bands ("The Outer Walls" → "World-Ender Epoch")
+//      + 25 lore-grounded flavor strings; HUD subtitle
 // ============================================================
 
 const W = 480, H = 720;
@@ -106,6 +108,48 @@ const CLASS_SPECS = {
 };
 
 function xpForLevel(lv) { return lv * 80 + 20; }
+
+// ── WAVE BANDS (named progression chunks, lore-grounded) ────
+const WAVE_BANDS = [
+  { from: 1,  name: 'The Outer Walls' },
+  { from: 4,  name: 'Below the Crypt' },
+  { from: 7,  name: 'The Hive Rises' },
+  { from: 10, name: 'The Architects' },
+  { from: 13, name: 'Resonance' },
+  { from: 16, name: 'The Singing' },
+  { from: 19, name: 'Mothers Descend' },
+  { from: 21, name: 'The World-Ender Epoch' }
+];
+function getWaveBand(w) { let b = WAVE_BANDS[0]; for (const x of WAVE_BANDS) if (w >= x.from) b = x; return b; }
+
+// 25 lore-grounded flavor strings; sourced from Culigri Collective lore
+const WAVE_FLAVORS = [
+  'The hive stirs beneath the earth.',
+  'Mandibles scrape stone. They are coming.',
+  'The swarm has caught our scent.',
+  'Shadows move where no shadows should be.',
+  'The Keep’s shadow grows long. Prepare.',
+  'The hive awakens. Reinforcements endless.',
+  'They pour from every crevice, an organic tide.',
+  'No negotiation. No mercy. Only the harvest.',
+  'The Keep glows brighter—they are drawn to it.',
+  'We hold. We bleed. We hold.',
+  'The ground itself writhes. Hive corruption spreads.',
+  'Queens send their brood. Architects direct the swarm.',
+  'The air is thick with spores. Lungs burn.',
+  'They learn. They adapt. They hunger.',
+  'Only the strongest bloodline will outlive this dawn.',
+  'The hive itself descends. All is shadow and chitin.',
+  'Mothers of the swarm command the assault.',
+  'The earth cracks. The sky darkens. The end times whisper.',
+  'They sing now. The collective voice of the hive itself.',
+  'This is no longer a wave. This is the harvest.',
+  'Tungsten claws scrape against tungsten claws.',
+  'The Seeds beneath us pulse. They want them back.',
+  'Ten thousand years between visits. Today, they collect.',
+  'The hive is older than your kingdom.',
+  'Hold the gate. Hold the line. Hold thy nerve.'
+];
 
 // ── PLAYER STATE ────────────────────────────────────────────
 let PLAYER = null;
@@ -317,7 +361,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>this.scene.start('ClassSelectScene'));
       this.input.on('pointerdown',()=>this.scene.start('ClassSelectScene'));
     }
-    this.add.text(W/2,H-30,'v7.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v8.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -524,7 +568,8 @@ class GameScene extends Phaser.Scene {
     this.hpBar.fillStyle(pct > 0.5 ? 0x6b8e23 : pct > 0.25 ? 0xcc8800 : 0x8b1a1a, 1);
     this.hpBar.fillRoundedRect(15,H-29,200*pct,16,2);
     this.hpText.setText(`${Math.ceil(this.hp)} / ${this.maxHp}`);
-    this.waveText.setText(`— Wave ${this.wave} —`);
+    const band = this.wave > 0 ? getWaveBand(this.wave) : null;
+    this.waveText.setText(band ? `— Wave ${this.wave} · ${band.name} —` : `— Wave ${this.wave} —`);
 
     const xpN = xpForLevel(PLAYER.level);
     this.levelText.setText(`Lv ${PLAYER.level}  ◆  ${PLAYER.xp}/${xpN} XP`);
@@ -678,9 +723,18 @@ class GameScene extends Phaser.Scene {
     if (this.wave > PLAYER.highestWave) PLAYER.highestWave = this.wave;
     this.waveActive = true;
 
+    const band = getWaveBand(this.wave);
+    const isBandStart = WAVE_BANDS.some(b => b.from === this.wave);
+
+    // Band entry: extra title above the wave count, lingers a beat longer
+    if (isBandStart) {
+      const bandTxt = this.add.text(W/2,H/2-130,`~ ${band.name} ~`,{fontSize:'20px',fontFamily:'serif',color:'#a89070',fontStyle:'italic'}).setOrigin(0.5).setDepth(101);
+      this.tweens.add({targets:bandTxt,alpha:0,duration:900,delay:1700,onComplete:()=>bandTxt.destroy()});
+    }
+
     const announce = this.add.text(W/2,H/2-80,`Wave ${this.wave}`,{fontSize:'32px',fontFamily:'serif',color:PAL.accent,stroke:'#1a1408',strokeThickness:3,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
-    const flavors = ['They approach the walls...','The swarm grows bolder.','Chittering in the dark.','The hive awakens.','Mandibles at the gate.','No quarter given.','The earth trembles.','Hold the line!','By steel and fire.','Endless hunger.'];
-    const sub = this.add.text(W/2,H/2-42,flavors[Math.min(this.wave-1,flavors.length-1)],{fontSize:'12px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5).setDepth(100);
+    const flavor = WAVE_FLAVORS[Math.min(this.wave-1, WAVE_FLAVORS.length-1)];
+    const sub = this.add.text(W/2,H/2-42,flavor,{fontSize:'12px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic',wordWrap:{width:380},align:'center'}).setOrigin(0.5).setDepth(100);
     this.tweens.add({targets:[announce,sub],alpha:0,duration:600,delay:1200,onComplete:()=>{announce.destroy();sub.destroy();}});
     this.time.delayedCall(800,()=>this.spawnWaveEnemies());
     this.updateHUD();

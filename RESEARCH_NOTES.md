@@ -17,7 +17,7 @@ Each loop iteration:
 ## Priority backlog (top = ship next)
 
 ### Combat depth — small, additive
-- [ ] **v7: Crit chance + crit damage** — add Perception (PER, +1% crit/pt, cap 50%) and Luck (LUK, +5% crit dmg/pt, base 2.0x). On crit: yellow particles, +2 combo instead of +1 (synergy with v6 pierce). Migrate v6→v7 save key. Update STAT_INFO, CLASSES base, LevelUpScene rows (compress spacing 40→36 to fit 7 attributes), ClassSelectScene bars (62→45 px), GameOverScene attribute readout.
+- [x] **v7: Crit chance + crit damage** — shipped. PER + LUK stats, crit kills jump combo by 2.
 - [ ] **v8: Cooldown reduction stat** — Wisdom-style. Either extend Haste (specials -3% CD/pt, cap 60%) or add new stat. Cleanest: Haste already has tradeoff; piggyback there. Specials feel reactive, not hoarded.
 - [ ] **v9: Charger enemy (wave 4+)** — telegraphed 0.8s wind-up (red ring around enemy), then sprints 3x straight at player until wall or kill. 2x contact damage on impact. Forces dodge-or-kill timing. Reuses existing crawler/flyer pattern, just extends.
 - [ ] **v10: Acid pools from Spitter** — when Spitter shoots, also drops a green pool at its target spot lasting 4s, ticking 1 dmg/0.5s if player stands in it. Stateless graphics object array, like particles. Adds positioning layer.
@@ -30,7 +30,7 @@ Each loop iteration:
 
 ### Polish & feel — high-impact, low-risk
 - [ ] **v15: Tone.js procedural SFX** — fire (twang), hit (chitin crack), crit (chime), kill (squish), wave start (drum), level up (bell), death (gong), special activate (per-class). Single CDN script tag, ~100 lines of code.
-- [ ] **v16: Wave bands + extended flavor** — 8 named bands ("The Outer Walls" w1-3, "Below the Crypt" w4-6, "The Hive Rises" w7-9, "The Architects" w10-12, "Resonance" w13-15, "The Singing" w16-18, "Mothers Descend" w19-20, "World-Ender Epoch" w21+). Add ~25 flavor lines. Pure content, no mechanics.
+- [x] **v8: Wave bands + extended flavor** — shipped. 8 bands, 25 flavor strings, HUD subtitle.
 - [ ] **v17: Faction codename + class lore on title** — "The Culigri Collective" tagline beneath subtitle. Class blurbs in select screen (1 line each, lore-grounded).
 - [ ] **v18: Hit-stop frames + screen flash** — on crit-kill: 30ms time freeze + brief white screen flash. Game-feel upgrade, ~15 lines.
 - [ ] **v19: Sprite swap for 3 base enemies** — downscale `Processed/NewDroneSprite.png`, `NewFlyerSprite.png`, `NewSpitterSprite.png` to 64×64 PNGs in `assets/enemies/`. Swap drawEnemy() to use Phaser images for those types; keep procedural fallback.
