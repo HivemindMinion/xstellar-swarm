@@ -28,6 +28,7 @@
 //  v12: procedural SFX via Tone.js (fire/hit/crit/kill/wave/...)
 //  v13: Mini-Queen boss wave (every 5th wave) + Broodlings
 //  v14: Brood Tyrant boss (wave 10/20/30 alternates with Queen)
+//  v15: Hive Architect boss (wave 15) — round-robin Q→T→A boss cycle
 // ============================================================
 
 const W = 480, H = 720;
@@ -402,7 +403,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v14.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v15.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -822,10 +823,11 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnBossWave() {
-    // Boss rotation by wave: w5/15/25 = Mini-Queen (mobile spawner),
-    //                        w10/20/30 = Brood Tyrant (stationary egg-sac volleyer)
-    if (this.wave % 10 === 0) this.spawnTyrantWave();
-    else this.spawnQueenWave();
+    // Round-robin: w5→Queen, w10→Tyrant, w15→Architect, w20→Queen, w25→Tyrant, w30→Architect, ...
+    const idx = (Math.floor(this.wave / 5) - 1) % 3;
+    if (idx === 0) this.spawnQueenWave();
+    else if (idx === 1) this.spawnTyrantWave();
+    else this.spawnArchitectWave();
   }
 
   spawnQueenWave() {
@@ -841,16 +843,24 @@ class GameScene extends Phaser.Scene {
     this.enemiesRemaining = 1;
   }
 
+  spawnArchitectWave() {
+    // Architect doesn't attack directly — she teleports between 3 anchor points,
+    // each teleport spawns 2 minions. Threat is in the minion build-up.
+    this.spawnEnemy(W/2, -60, 80, 'architect', 0);
+    this.enemiesRemaining = 1;
+  }
+
   spawnEnemy(x,startY,targetY,type,delay) {
-    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a,tyrant:0x6a1144,eggsac:0x4a0a22};
-    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1,tyrant:100+this.wave*10,eggsac:4};
-    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5,tyrant:120,eggsac:6};
-    const isBoss = type==='queen' || type==='tyrant';
+    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a,tyrant:0x6a1144,eggsac:0x4a0a22,architect:0x8a6a1a};
+    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1,tyrant:100+this.wave*10,eggsac:4,architect:80+this.wave*9};
+    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5,tyrant:120,eggsac:6,architect:100};
+    const isBoss = type==='queen' || type==='tyrant' || type==='architect';
     const g = this.add.graphics().setDepth(isBoss?12:10);
     let initSpawnTimer = 0;
     if (type==='queen') initSpawnTimer = 4000;
     if (type==='tyrant') initSpawnTimer = 5000;
-    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0};
+    if (type==='architect') initSpawnTimer = 3500;
+    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type],color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1};
     const tweenDur = isBoss ? 1500 : 900;
     this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
@@ -955,6 +965,31 @@ class GameScene extends Phaser.Scene {
       // Eyes (two large, glowing)
       e.gfx.fillStyle(0xff88aa, 0.6); e.gfx.fillCircle(x-7, y-14, 5); e.gfx.fillCircle(x+7, y-14, 5);
       e.gfx.fillStyle(0xff2266, 1); e.gfx.fillCircle(x-7, y-14, 3); e.gfx.fillCircle(x+7, y-14, 3);
+    } else if (e.type==='architect') {
+      const al = Math.sin(time*0.005)*3;
+      // Hexagonal-patterned carapace
+      e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 38, 28);
+      e.gfx.fillStyle(0x4a3010, 0.55); e.gfx.fillEllipse(x, y, 30, 20);
+      // Spade fore-tools (builder mandibles)
+      e.gfx.fillStyle(0xccaa44, 0.95);
+      e.gfx.fillTriangle(x-14, y-10, x-22, y-14, x-16, y-2);
+      e.gfx.fillTriangle(x+14, y-10, x+22, y-14, x+16, y-2);
+      // Six articulated limbs
+      e.gfx.lineStyle(2, 0x4a3010, 0.95);
+      for (let s=-1; s<=1; s+=2) {
+        e.gfx.moveTo(x+s*16, y-5); e.gfx.lineTo(x+s*25+al, y-11);
+        e.gfx.moveTo(x+s*16, y);    e.gfx.lineTo(x+s*27-al, y);
+        e.gfx.moveTo(x+s*16, y+5); e.gfx.lineTo(x+s*25+al, y+11);
+      }
+      e.gfx.strokePath();
+      // Hexagonal grid markings on back (3 small circles)
+      e.gfx.lineStyle(1, 0xffaa44, 0.6);
+      for (let i = -1; i <= 1; i++) e.gfx.strokeCircle(x + i*9, y, 3);
+      // Glowing orange compound eyes
+      e.gfx.fillStyle(0xffcc88, 0.55);
+      e.gfx.fillCircle(x-7, y-3, 4.5); e.gfx.fillCircle(x+7, y-3, 4.5);
+      e.gfx.fillStyle(0xffaa44, 1);
+      e.gfx.fillCircle(x-7, y-3, 2.5); e.gfx.fillCircle(x+7, y-3, 2.5);
     } else if (e.type==='eggsac') {
       const pulse = 0.55 + Math.sin(time*0.012)*0.25;
       const t = Math.max(0, Math.min(1, 1 - e.hatchTimer / 3000));
@@ -981,7 +1016,7 @@ class GameScene extends Phaser.Scene {
     }
     // HP bar — wider for bosses so the chunky number is readable
     if (e.hp<e.maxHp) {
-      const isBoss = e.type==='queen' || e.type==='tyrant';
+      const isBoss = e.type==='queen' || e.type==='tyrant' || e.type==='architect';
       const bw = isBoss ? 50 : 24;
       const by = isBoss ? y-32 : y-22;
       e.gfx.fillStyle(0x1a1a1a,0.8); e.gfx.fillRect(x-bw/2,by,bw,3);
@@ -1072,10 +1107,12 @@ class GameScene extends Phaser.Scene {
               this.hitStop = Math.max(this.hitStop, 70);
             }
             // Boss death: bigger sensory payoff regardless of crit
-            if (e.type === 'queen' || e.type === 'tyrant') {
-              this.spawnParticle(e.x, e.y, 0xff66cc, 24);
+            if (e.type === 'queen' || e.type === 'tyrant' || e.type === 'architect') {
+              const flashRGB = e.type === 'architect' ? [255, 200, 100] : [255, 100, 180];
+              const partA = e.type === 'architect' ? 0xffcc66 : 0xff66cc;
+              this.spawnParticle(e.x, e.y, partA, 24);
               this.spawnParticle(e.x, e.y, PAL.gold, 12);
-              this.cameras.main.flash(200, 255, 100, 180, false);
+              this.cameras.main.flash(200, flashRGB[0], flashRGB[1], flashRGB[2], false);
               this.hitStop = Math.max(this.hitStop, 160);
               SFX.levelUp(); // celebratory sting on top of kill
             }
@@ -1165,6 +1202,31 @@ class GameScene extends Phaser.Scene {
           SFX.hit();
         }
       }
+      // Architect: teleports between 3 anchor points every 3.5s, spawning 2 minions on arrival
+      if (e.type==='architect' && e.arrived) {
+        e.spawnTimer -= delta;
+        if (e.spawnTimer <= 0) {
+          // Burst at old position before warp
+          this.spawnParticle(e.x, e.y, 0xff8822, 14);
+          this.spawnParticle(e.x, e.y, 0xffcc66, 6);
+          // Pick a different anchor than current
+          const anchors = [100, W/2, W-100];
+          let nextIdx;
+          do { nextIdx = Phaser.Math.Between(0, 2); } while (nextIdx === e.anchorIdx && e.anchorIdx >= 0);
+          e.anchorIdx = nextIdx;
+          e.x = anchors[nextIdx];
+          e.y = 80;
+          // Burst at new position after warp
+          this.spawnParticle(e.x, e.y, 0xff8822, 14);
+          this.spawnParticle(e.x, e.y, 0xffcc66, 6);
+          // Spawn 2 minions (one crawler + one broodling for mixed threat)
+          this.spawnEnemy(e.x - 22, e.y + 30, e.y + 60, 'crawler', 200);
+          this.spawnEnemy(e.x + 22, e.y + 30, e.y + 60, 'broodling', 400);
+          this.enemiesRemaining += 2;
+          e.spawnTimer = 3500;
+          SFX.special();
+        }
+      }
       // Eggsac: 3s telegraph, then hatches into a broodling at the same spot.
       // Sac dies on hatch (-1 enemiesRemaining), broodling spawns (+1) — net 0.
       if (e.type==='eggsac') {
@@ -1191,7 +1253,7 @@ class GameScene extends Phaser.Scene {
         if (Phaser.Math.Distance.Between(e.x,e.y,this.shipX,this.shipY)<22) {
           // Contact damage scales by threat: charger ram 2x, boss 3x, others 1x
           const baseDmg = 3 + this.wave;
-          const isBossType = e.type==='queen' || e.type==='tyrant';
+          const isBossType = e.type==='queen' || e.type==='tyrant' || e.type==='architect';
           const dmg = e.type==='charger' ? baseDmg*2 : isBossType ? baseDmg*3 : baseDmg;
           this.takeDamage(dmg);
           // Bosses survive contact; others die on touch

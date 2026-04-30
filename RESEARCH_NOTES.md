@@ -26,7 +26,7 @@ Each loop iteration:
 ### Boss waves — every 5th wave
 - [x] **v13: Mini-Queen boss (every 5th wave)** — shipped. Queen + 4 supporting crawlers; Queen advances slowly, spawns broodlings every 4s, 60+wave*8 HP, 80 XP, 3x contact damage. Pink-flash + slow-mo + level-up sting on death.
 - [x] **v14: Brood Tyrant boss (wave 10/20/30)** — shipped. Stationary, 100+wave*10 HP, lays 3 sacs every 8s; sacs hatch into broodlings after 3s. Kill sacs early to skip broodlings. Alternates with Queen on /5 wave cadence.
-- [ ] **v14: Hive Architect boss (wave 15)** — doesn't attack; teleports between 3 anchor points each spawning 2 enemies on arrival. Mid-battle spawner. Force focus-fire vs. cleared minions.
+- [x] **v15: Hive Architect boss (wave 15+, round-robin)** — shipped. Teleports between 3 anchor points every 3.5s, each warp spawns crawler+broodling pair. Round-robin Q→T→A boss cycle.
 
 ### Polish & feel — high-impact, low-risk
 - [x] **v12: Tone.js procedural SFX** — shipped. 8 sounds (fire pluck, hit pink-noise, crit FM bell, kill brown-noise, wave drum, level-up bell arpeggio, death gong, special FM flourish). Init on first user gesture; silent fallback if Tone.js fails to load. Throttled hit/kill at 40/60ms to avoid noise spam.
