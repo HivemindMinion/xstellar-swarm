@@ -36,7 +36,7 @@ Each loop iteration:
 - [ ] **v19: Sprite swap for 3 base enemies** — downscale `Processed/NewDroneSprite.png`, `NewFlyerSprite.png`, `NewSpitterSprite.png` to 64×64 PNGs in `assets/enemies/`. Swap drawEnemy() to use Phaser images for those types; keep procedural fallback.
 
 ### Heavier mechanics — defer until above land
-- [ ] **v20: Wraith enemy** — phase-teleport every 3s to a random spot 80-180px away, intangible while phasing.
+- [x] **v20: Wraith enemy** — shipped. Wave 7+, 10% spawn weight. Phase-cycles 2-4s; teleports 80-180px while phased; bullets pass through phased wraiths.
 - [ ] **v21: Burrower enemy** — 2s underground (invuln), emerges adjacent to player with telegraph ring 0.5s before.
 - [ ] **v22: Carrier enemy** — drops 1 egg every 5s as it moves; eggs hatch into broodlings (1 HP, fast) after 2s.
 - [ ] **v23: Shielder/Resonator support orbits** — non-attacking enemies that grant nearby bugs +damage or HP regen aura. Forces target-priority decisions.
