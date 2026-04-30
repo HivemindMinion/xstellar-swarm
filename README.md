@@ -1,4 +1,5 @@
 # XStellar: Swarm — Castle Defense
+**▶ [Play it now](https://hivemindminion.github.io/xstellar-swarm/)**
 
 **Medieval Galaga × RPG × Survival | Humans vs. Bugs**
 
