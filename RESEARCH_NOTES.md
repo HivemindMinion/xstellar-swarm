@@ -29,7 +29,7 @@ Each loop iteration:
 - [ ] **v14: Hive Architect boss (wave 15)** — doesn't attack; teleports between 3 anchor points each spawning 2 enemies on arrival. Mid-battle spawner. Force focus-fire vs. cleared minions.
 
 ### Polish & feel — high-impact, low-risk
-- [ ] **v15: Tone.js procedural SFX** — fire (twang), hit (chitin crack), crit (chime), kill (squish), wave start (drum), level up (bell), death (gong), special activate (per-class). Single CDN script tag, ~100 lines of code.
+- [x] **v12: Tone.js procedural SFX** — shipped. 8 sounds (fire pluck, hit pink-noise, crit FM bell, kill brown-noise, wave drum, level-up bell arpeggio, death gong, special FM flourish). Init on first user gesture; silent fallback if Tone.js fails to load. Throttled hit/kill at 40/60ms to avoid noise spam.
 - [x] **v8: Wave bands + extended flavor** — shipped. 8 bands, 25 flavor strings, HUD subtitle.
 - [ ] **v17: Faction codename + class lore on title** — "The Culigri Collective" tagline beneath subtitle. Class blurbs in select screen (1 line each, lore-grounded).
 - [x] **v9: Hit-stop + camera flash on crit-kill** — shipped. 70ms slow-mo at 8% time + 60ms gold flash.
