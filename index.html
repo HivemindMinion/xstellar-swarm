@@ -36,6 +36,7 @@
 //  v20: Wraith enemy — phase-teleports, intangible during phase
 //  v21: Shielder + Resonator — support auras (50% DR / 1 HP/s heal)
 //  v22: QoL fixes — HP bar refresh, special unlocked at start, combo carries waves
+//  v23: sprite swap for 12 enemy types + ground-bug formations land in field
 // ============================================================
 
 const W = 480, H = 720;
@@ -132,6 +133,20 @@ const ELITE_MODS = {
   regen:   { name: 'Regen',   color: 0x44ff66, hpRegen: 1.0 } // HP/sec
 };
 const ELITE_KEYS = Object.keys(ELITE_MODS);
+
+// ── ENEMY SPRITES (XStellar canon, downscaled) ──────────────
+// Types in this set use a Phaser.Image for the body; eggsacs stay procedural.
+// Each value is the on-screen display size (longer dimension) in px.
+const SPRITE_SIZES = {
+  crawler: 38, flyer: 36, spitter: 42, charger: 44, screamer: 38,
+  wraith: 38, shielder: 40, resonator: 38, broodling: 22,
+  queen: 76, tyrant: 84, architect: 76
+};
+const SPRITE_TYPES = new Set(Object.keys(SPRITE_SIZES));
+
+// Ground-walking types form deeper into the battlefield (closer to the wall);
+// flyer-types stay high in the sky for that classic Galaga dive.
+const GROUND_TYPES = new Set(['crawler','spitter','charger','screamer','shielder','resonator']);
 
 // ── WAVE BANDS (named progression chunks, lore-grounded) ────
 const WAVE_BANDS = [
@@ -423,7 +438,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v22.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v23.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -486,6 +501,12 @@ class ClassSelectScene extends Phaser.Scene {
 // ════════════════════════════════════════════════════════════
 class GameScene extends Phaser.Scene {
   constructor() { super('GameScene'); }
+
+  preload() {
+    SPRITE_TYPES.forEach(k => {
+      if (!this.textures.exists(`enemy-${k}`)) this.load.image(`enemy-${k}`, `assets/enemies/${k}.png`);
+    });
+  }
 
   create() {
     this.input.mouse.disableContextMenu();
@@ -842,7 +863,7 @@ class GameScene extends Phaser.Scene {
     for (let r = 0; r < rows && spawned < count; r++) {
       const rc = Math.min(cols, count-spawned);
       for (let c = 0; c < rc; c++) {
-        const ex = 50+c*((W-100)/(rc-1||1)), ey = -30-r*50, ty = 40+r*50;
+        const ex = 50+c*((W-100)/(rc-1||1));
         let type = 'crawler';
         if (this.wave>=3&&Math.random()<0.25) type='flyer';
         if (this.wave>=4&&Math.random()<0.18) type='charger';
@@ -851,6 +872,10 @@ class GameScene extends Phaser.Scene {
         if (this.wave>=7&&Math.random()<0.10) type='wraith';
         if (this.wave>=8&&Math.random()<0.08) type='shielder';
         if (this.wave>=8&&Math.random()<0.08) type='resonator';
+        // Ground-walking types form deeper into the field (closer to wall);
+        // flyers/wraith stay high in the sky for the classic Galaga dive.
+        const ty = GROUND_TYPES.has(type) ? 240 + r*44 : 40 + r*50;
+        const ey = -30 - r*50;
         this.spawnEnemy(ex,ey,ty,type,spawned*70); spawned++;
       }
     }
@@ -868,7 +893,7 @@ class GameScene extends Phaser.Scene {
   spawnQueenWave() {
     this.spawnEnemy(W/2, -60, 90, 'queen', 0);
     const supportXs = [80, 160, W-160, W-80];
-    supportXs.forEach((sx, i) => this.spawnEnemy(sx, -30-i*30, 50+i*15, 'crawler', 400 + i*200));
+    supportXs.forEach((sx, i) => this.spawnEnemy(sx, -30-i*30, 280+i*15, 'crawler', 400 + i*200));
     this.enemiesRemaining = 1 + supportXs.length;
   }
 
@@ -898,7 +923,14 @@ class GameScene extends Phaser.Scene {
     // Elite roll: 6% chance on regular enemies (skip bosses, sacs, broodlings) wave 4+
     const eliteEligible = !isBoss && type !== 'eggsac' && type !== 'broodling';
     const elite = (eliteEligible && this.wave >= 4 && Math.random() < 0.06) ? Phaser.Utils.Array.GetRandom(ELITE_KEYS) : null;
-    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0,phaseTimer:type==='wraith'?Phaser.Math.Between(1500,3000):0,phasedOut:false,phaseFadeT:0,auraTimer:0};
+    // Sprite-backed body (Phaser image). Eggsac and unmapped types stay procedural.
+    let spriteImg = null;
+    if (SPRITE_TYPES.has(type) && this.textures.exists(`enemy-${type}`)) {
+      spriteImg = this.add.image(x, startY, `enemy-${type}`).setDepth(isBoss?12:10);
+      const tex = this.textures.get(`enemy-${type}`).getSourceImage();
+      spriteImg.setScale(SPRITE_SIZES[type] / Math.max(tex.width, tex.height));
+    }
+    const enemy = {gfx:g,spriteImg,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0,phaseTimer:type==='wraith'?Phaser.Math.Between(1500,3000):0,phasedOut:false,phaseFadeT:0,auraTimer:0};
     const tweenDur = isBoss ? 1500 : 900;
     this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
@@ -906,8 +938,18 @@ class GameScene extends Phaser.Scene {
 
   drawEnemy(e, time) {
     e.gfx.clear();
-    if (!e.alive) return;
+    if (!e.alive) {
+      if (e.spriteImg) { e.spriteImg.destroy(); e.spriteImg = null; }
+      return;
+    }
     const x=e.x,y=e.y,lo=Math.sin((time*0.006)+e.legPhase)*3;
+    // Sync sprite to the enemy's logical position; phased wraith fades alpha.
+    if (e.spriteImg) {
+      e.spriteImg.setPosition(x, y);
+      e.spriteImg.setAlpha(e.phasedOut ? 0.22 : 1);
+    }
+    // Procedural body — only fires when no sprite is bound (eggsac, or if a texture failed to load)
+    if (!e.spriteImg) {
     if (e.type==='crawler') {
       e.gfx.fillStyle(e.color,1); e.gfx.fillEllipse(x,y,18,12); e.gfx.fillEllipse(x,y+10,14,8);
       e.gfx.fillStyle(0x3a5a1a,1); e.gfx.fillCircle(x,y+16,6);
@@ -949,15 +991,6 @@ class GameScene extends Phaser.Scene {
       e.gfx.fillTriangle(x+hx*0.5+Math.cos(hornDir-1.5)*3, y+hy*0.5+Math.sin(hornDir-1.5)*3,
                           x+hx*0.5+Math.cos(hornDir+1.5)*3, y+hy*0.5+Math.sin(hornDir+1.5)*3,
                           x+hx, y+hy);
-      // Telegraph during windup: red ring + aim line
-      if (e.chargeLocked && !e.diving) {
-        const t = 1 - Math.max(0, e.diveTimer / 800);
-        e.gfx.lineStyle(2, 0xff3322, 0.35 + t*0.5);
-        e.gfx.strokeCircle(x, y, 18 + t*10);
-        e.gfx.lineStyle(1, 0xff3322, 0.5 + t*0.4);
-        e.gfx.moveTo(x,y); e.gfx.lineTo(x+Math.cos(e.chargeAngle)*60, y+Math.sin(e.chargeAngle)*60);
-        e.gfx.strokePath();
-      }
     } else if (e.type==='queen') {
       const ql = Math.sin(time*0.005)*4, ePulse = 0.4 + Math.sin(time*0.003)*0.18;
       // Abdomen (egg sac, glowing)
@@ -1044,11 +1077,7 @@ class GameScene extends Phaser.Scene {
         e.gfx.strokePath();
       }
     } else if (e.type==='shielder') {
-      // Defensive support — pulsing blue aura, dome shell, low body
-      const auraPulse = 0.16 + Math.sin(time*0.005)*0.08;
-      e.gfx.fillStyle(0x4488cc, auraPulse); e.gfx.fillCircle(x, y, 60);
-      e.gfx.lineStyle(1, 0x88aaff, 0.35); e.gfx.strokeCircle(x, y, 60);
-      // Body
+      // Defensive support — body only here; aura is rendered in the auxiliary block
       e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 22, 18);
       // Dome shell (this is what generates the aura)
       e.gfx.fillStyle(0xaaccff, 0.55); e.gfx.fillEllipse(x, y-7, 18, 11);
@@ -1063,11 +1092,7 @@ class GameScene extends Phaser.Scene {
       }
       e.gfx.strokePath();
     } else if (e.type==='resonator') {
-      // Healing support — pulsing green aura, vibrating crystal facets
-      const auraPulse = 0.14 + Math.sin(time*0.008)*0.07;
-      e.gfx.fillStyle(0x44aa88, auraPulse); e.gfx.fillCircle(x, y, 60);
-      e.gfx.lineStyle(1, 0x88ffcc, 0.35); e.gfx.strokeCircle(x, y, 60);
-      // Body
+      // Healing support — body only here; aura is rendered in the auxiliary block
       e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 18, 18);
       // Crystal wing-plates (vibrating)
       const ePulse = 0.5 + Math.sin(time*0.012 + e.legPhase)*0.25;
@@ -1100,11 +1125,6 @@ class GameScene extends Phaser.Scene {
       e.gfx.fillEllipse(x, y+10, 9, 6);
       e.gfx.fillStyle(e.color, 0.18 * wA);
       e.gfx.fillEllipse(x, y+16, 6, 4);
-      // Phase-out outline ring
-      if (e.phasedOut) {
-        e.gfx.lineStyle(1, 0xaaccff, 0.45);
-        e.gfx.strokeCircle(x, y, 14);
-      }
     } else if (e.type==='screamer') {
       // Bulbous body with oversized vocal chamber and panicked eyes
       const mouthOpen = 4 + Math.sin(time*0.022)*2.5;
@@ -1128,12 +1148,6 @@ class GameScene extends Phaser.Scene {
         e.gfx.moveTo(x+s*8, y+8); e.gfx.lineTo(x+s*13, y+12-sLo);
       }
       e.gfx.strokePath();
-      // Urgency ring in last 3s of escapeTimer
-      if (e.escapeTimer < 3000 && e.escapeTimer > 0) {
-        const t = 1 - e.escapeTimer / 3000;
-        e.gfx.lineStyle(1, 0xffff66, 0.3 + t*0.5);
-        e.gfx.strokeCircle(x, y, 14 + t*6);
-      }
     } else if (e.type==='broodling') {
       const bl = Math.sin(time*0.012+e.legPhase)*1.5;
       e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 11, 7);
@@ -1143,6 +1157,42 @@ class GameScene extends Phaser.Scene {
       for (let s=-1; s<=1; s+=2) { e.gfx.moveTo(x+s*4, y); e.gfx.lineTo(x+s*7, y+3+bl); }
       e.gfx.strokePath();
     }
+    } // end procedural-body branch
+
+    // ── AUXILIARY VISUALS (run regardless of sprite-or-procedural body) ────────
+    // Shielder defensive aura
+    if (e.type === 'shielder') {
+      const auraPulse = 0.16 + Math.sin(time*0.005)*0.08;
+      e.gfx.fillStyle(0x4488cc, auraPulse); e.gfx.fillCircle(x, y, 60);
+      e.gfx.lineStyle(1, 0x88aaff, 0.35); e.gfx.strokeCircle(x, y, 60);
+    }
+    // Resonator healing aura
+    if (e.type === 'resonator') {
+      const auraPulse = 0.14 + Math.sin(time*0.008)*0.07;
+      e.gfx.fillStyle(0x44aa88, auraPulse); e.gfx.fillCircle(x, y, 60);
+      e.gfx.lineStyle(1, 0x88ffcc, 0.35); e.gfx.strokeCircle(x, y, 60);
+    }
+    // Charger telegraph during windup — red ring + aim line
+    if (e.type === 'charger' && e.chargeLocked && !e.diving) {
+      const t = 1 - Math.max(0, e.diveTimer / 800);
+      e.gfx.lineStyle(2, 0xff3322, 0.35 + t*0.5);
+      e.gfx.strokeCircle(x, y, 22 + t*10);
+      e.gfx.lineStyle(1, 0xff3322, 0.5 + t*0.4);
+      e.gfx.moveTo(x,y); e.gfx.lineTo(x+Math.cos(e.chargeAngle)*60, y+Math.sin(e.chargeAngle)*60);
+      e.gfx.strokePath();
+    }
+    // Wraith phase-out outline ring
+    if (e.type === 'wraith' && e.phasedOut) {
+      e.gfx.lineStyle(1, 0xaaccff, 0.55);
+      e.gfx.strokeCircle(x, y, 18);
+    }
+    // Screamer urgency ring in last 3s
+    if (e.type === 'screamer' && e.escapeTimer < 3000 && e.escapeTimer > 0) {
+      const t = 1 - e.escapeTimer / 3000;
+      e.gfx.lineStyle(1, 0xffff66, 0.3 + t*0.5);
+      e.gfx.strokeCircle(x, y, 18 + t*6);
+    }
+
     // Elite halo — pulsing colored ring marks the modifier (rendered above body, below HP bar)
     if (e.elite) {
       const m = ELITE_MODS[e.elite];
@@ -1527,6 +1577,11 @@ class GameScene extends Phaser.Scene {
     // deliberately short so an active combo can survive into the next wave.
     if (this.waveActive && this.enemiesRemaining <= 0) {
       this.waveActive = false;
+      // Sprite images live outside the enemies group — clean them up before clearing.
+      this.enemies.getChildren().forEach(eg => {
+        const e = eg.getData('enemy');
+        if (e && e.spriteImg) { e.spriteImg.destroy(); e.spriteImg = null; }
+      });
       this.enemies.clear(true, true);
       this.time.delayedCall(150, () => this.startWave());
     }

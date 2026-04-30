@@ -6,6 +6,28 @@ The latest version is always at the top.
 
 ---
 
+## v23 — Sprite swap (12 enemy types) + ground bugs land in the field
+
+### Added
+- **`assets/enemies/`** folder with 12 PNG sprites downscaled from the XStellar Unity project (`XStellar-Rebuild/Sprites/Enemies/Processed/`). Total 161KB across all 12. Mapped one-to-one to existing enemy types based on visual fit:
+  - Drone → crawler · Flyer → flyer · Spitter → spitter · Charger → charger
+  - HiveQueen → queen · Broodling → broodling · BroodTyrant → tyrant · HiveArchitect → architect
+  - Screamer → screamer · Wraith → wraith · Shielder → shielder · Resonator → resonator
+- `GameScene.preload()` loads all 12 sprites once; the texture cache prevents re-loads on subsequent runs.
+- `SPRITE_TYPES` set + `SPRITE_SIZES` map drive the sprite-vs-procedural branch and per-type display size.
+
+### Changed
+- `spawnEnemy()` now creates a Phaser `Image` at the enemy's position when the type matches a sprite. The image is stored on the enemy object as `spriteImg` and synced to position/alpha each frame in `drawEnemy`.
+- `drawEnemy()` refactored: procedural body chain is now gated on `if (!e.spriteImg)` so it only fires for eggsacs (and as fallback if a texture failed to load). Auxiliary visuals — Shielder/Resonator auras, Charger telegraph + aim line, Wraith phase outline, Screamer urgency ring — extracted into a separate "always-render" block so they fire regardless of whether the body is sprite or procedural.
+- **Ground-walking enemies now form deeper into the battlefield, not in the sky.** Crawlers, Spitters, Chargers, Screamers, Shielders, Resonators target row-y of `240 + r*44` (in the grass field, near the wall). Flyers and Wraiths keep the sky formation `40 + r*50` for the classic Galaga dive. Queen-wave crawler escorts also moved to the field.
+- Sprite images are destroyed on enemy death (in `drawEnemy` if `!e.alive` and on the wave-clear path) so they don't leak across waves.
+- Wraith phase alpha (0.22) is now applied to the sprite directly via `setAlpha`.
+
+### Removed
+- Procedural body code is no longer the visual default for the 12 mapped types — kept inline only as fallback (e.g. CDN/asset-fetch failure).
+
+---
+
 ## v22 — QoL pass: HP bar refresh, specials unlocked at start, combo carries between waves
 
 ### Changed
