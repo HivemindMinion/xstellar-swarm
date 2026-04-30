@@ -6,6 +6,19 @@ The latest version is always at the top.
 
 ---
 
+## v24 — Bug fixes: wave chain-firing, lingering corpses, and ground perspective
+
+### Fixed
+- **Multiple waves spawning at once.** The wave-end check (`enemiesRemaining <= 0`) was firing every frame in the 250ms gap between `startWave()` running and `spawnWaveEnemies()` populating the count. Each fire scheduled another `startWave`, chain-spawning 2-3 waves in close succession. Added a `pendingSpawn` flag set true in `startWave` and cleared inside the `spawnWaveEnemies` callback; the wave-end check now requires `!pendingSpawn`.
+- **Wave still moving on before all enemies were dead.** Symptom of the same bug — when a chain-fired startWave overwrote `enemiesRemaining` with the new wave's count, lingering enemies from the previous wave became "free" and the player was already in the next wave. Same fix.
+- **Dead enemies' sprites lingered on the battlefield.** Kill paths set `e.alive = false` but the update-loop's early-return skipped `drawEnemy`, where the sprite teardown lived. Now the early-return itself destroys the sprite.
+
+### Added
+- **Perspective scaling for ground bugs.** Crawlers, Spitters, Chargers, Screamers, Shielders, and Resonators now scale based on their on-screen Y: ~0.45× when they appear at the horizon, ~1.2× when they reach the wall. Function `groundPerspective(y)` maps `y ∈ [200, 620]` to scale `[0.45, 1.20]`, clamped to `[0.40, 1.25]` at the edges.
+- **Slow advance for ground "creepers."** Crawlers, Spitters, Shielders, Resonators now advance 9 px/s toward the wall after arriving in formation (until y=600). Combined with perspective scaling, they read as continuously approaching from depth. Speedy elites advance proportionally faster. Chargers (own dive logic) and Screamers (escape sideways) are excluded.
+
+---
+
 ## v23 — Sprite swap (12 enemy types) + ground bugs land in the field
 
 ### Added

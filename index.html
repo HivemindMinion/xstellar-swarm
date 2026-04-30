@@ -37,6 +37,7 @@
 //  v21: Shielder + Resonator — support auras (50% DR / 1 HP/s heal)
 //  v22: QoL fixes — HP bar refresh, special unlocked at start, combo carries waves
 //  v23: sprite swap for 12 enemy types + ground-bug formations land in field
+//  v24: bug fixes — wave-chain, lingering corpses, perspective scaling
 // ============================================================
 
 const W = 480, H = 720;
@@ -147,6 +148,13 @@ const SPRITE_TYPES = new Set(Object.keys(SPRITE_SIZES));
 // Ground-walking types form deeper into the battlefield (closer to the wall);
 // flyer-types stay high in the sky for that classic Galaga dive.
 const GROUND_TYPES = new Set(['crawler','spitter','charger','screamer','shielder','resonator']);
+// "Stand and approach" creepers — slowly advance toward the wall after arriving in formation.
+// Excludes: charger (locks aim then sprints), screamer (escapes sideways), broodlings (own logic).
+const GROUND_CREEPERS = new Set(['crawler','spitter','shielder','resonator']);
+
+// Perspective scale for ground enemies — smaller in the distance, larger as they approach the wall.
+// Maps y in [200, 620] to scale [0.45, 1.20], clamped at the edges.
+function groundPerspective(y) { return Phaser.Math.Clamp(0.45 + (y - 200) / 420 * 0.75, 0.4, 1.25); }
 
 // ── WAVE BANDS (named progression chunks, lore-grounded) ────
 const WAVE_BANDS = [
@@ -438,7 +446,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v23.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v24.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -515,7 +523,7 @@ class GameScene extends Phaser.Scene {
     this.torches = drawTorches(this, this.wallY);
     this.debris = createFieldDebris(this);
 
-    this.wave = 0; this.waveActive = false; this.enemiesRemaining = 0;
+    this.wave = 0; this.waveActive = false; this.enemiesRemaining = 0; this.pendingSpawn = false;
     this.hp = getMaxHP(); this.maxHp = getMaxHP();
     this.kills = 0; this.combo = 0; this.comboTimer = 0;
     this.lastFire = 0; this.invincible = 0; this.shakeTime = 0;
@@ -831,6 +839,9 @@ class GameScene extends Phaser.Scene {
     PLAYER.wavesCleared = this.wave - 1;
     if (this.wave > PLAYER.highestWave) PLAYER.highestWave = this.wave;
     this.waveActive = true;
+    // Gate the wave-end check while the spawn delay is in flight so it doesn't
+    // chain-fire startWave on enemiesRemaining=0 between waves.
+    this.pendingSpawn = true;
 
     const band = getWaveBand(this.wave);
     const isBandStart = WAVE_BANDS.some(b => b.from === this.wave);
@@ -850,8 +861,9 @@ class GameScene extends Phaser.Scene {
     const flavor = WAVE_FLAVORS[Math.min(this.wave-1, WAVE_FLAVORS.length-1)];
     const sub = this.add.text(W/2,H/2-42,flavor,{fontSize:'12px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic',wordWrap:{width:380},align:'center'}).setOrigin(0.5).setDepth(100);
     this.tweens.add({targets:[announce,sub],alpha:0,duration:600,delay:1200,onComplete:()=>{announce.destroy();sub.destroy();}});
-    // Spawn enemies fast so an active combo can carry from the previous wave
-    this.time.delayedCall(250,()=>this.spawnWaveEnemies());
+    // Spawn enemies fast so an active combo can carry from the previous wave.
+    // pendingSpawn flips off only after spawn actually populates enemiesRemaining.
+    this.time.delayedCall(250, () => { this.spawnWaveEnemies(); this.pendingSpawn = false; });
     SFX.wave();
     this.updateHUD();
   }
@@ -924,13 +936,14 @@ class GameScene extends Phaser.Scene {
     const eliteEligible = !isBoss && type !== 'eggsac' && type !== 'broodling';
     const elite = (eliteEligible && this.wave >= 4 && Math.random() < 0.06) ? Phaser.Utils.Array.GetRandom(ELITE_KEYS) : null;
     // Sprite-backed body (Phaser image). Eggsac and unmapped types stay procedural.
-    let spriteImg = null;
+    let spriteImg = null, baseScale = 1;
     if (SPRITE_TYPES.has(type) && this.textures.exists(`enemy-${type}`)) {
       spriteImg = this.add.image(x, startY, `enemy-${type}`).setDepth(isBoss?12:10);
       const tex = this.textures.get(`enemy-${type}`).getSourceImage();
-      spriteImg.setScale(SPRITE_SIZES[type] / Math.max(tex.width, tex.height));
+      baseScale = SPRITE_SIZES[type] / Math.max(tex.width, tex.height);
+      spriteImg.setScale(baseScale);
     }
-    const enemy = {gfx:g,spriteImg,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0,phaseTimer:type==='wraith'?Phaser.Math.Between(1500,3000):0,phasedOut:false,phaseFadeT:0,auraTimer:0};
+    const enemy = {gfx:g,spriteImg,baseScale,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0,phaseTimer:type==='wraith'?Phaser.Math.Between(1500,3000):0,phasedOut:false,phaseFadeT:0,auraTimer:0};
     const tweenDur = isBoss ? 1500 : 900;
     this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
@@ -944,9 +957,13 @@ class GameScene extends Phaser.Scene {
     }
     const x=e.x,y=e.y,lo=Math.sin((time*0.006)+e.legPhase)*3;
     // Sync sprite to the enemy's logical position; phased wraith fades alpha.
+    // Ground bugs get perspective scaling: tiny on the horizon, large near the wall.
     if (e.spriteImg) {
       e.spriteImg.setPosition(x, y);
       e.spriteImg.setAlpha(e.phasedOut ? 0.22 : 1);
+      if (GROUND_TYPES.has(e.type)) {
+        e.spriteImg.setScale(e.baseScale * groundPerspective(y));
+      }
     }
     // Procedural body — only fires when no sprite is bound (eggsac, or if a texture failed to load)
     if (!e.spriteImg) {
@@ -1334,7 +1351,12 @@ class GameScene extends Phaser.Scene {
     // Enemies
     this.enemies.getChildren().forEach(eg => {
       const e = eg.getData('enemy');
-      if (!e||!e.alive) return;
+      if (!e || !e.alive) {
+        // Lingering sprite cleanup — kill paths set alive=false but the early-return
+        // here used to skip drawEnemy's sprite teardown. Destroy it now.
+        if (e && e.spriteImg) { e.spriteImg.destroy(); e.spriteImg = null; }
+        return;
+      }
       // Elite: Speedy multiplier applies to all e.x/e.y motion below; Regen ticks here once a sec.
       const sM = e.elite === 'speedy' ? ELITE_MODS.speedy.speedMult : 1;
       if (e.elite === 'regen' && e.hp < e.maxHp) {
@@ -1363,6 +1385,9 @@ class GameScene extends Phaser.Scene {
       // Idle wobble — disabled for chargers during telegraph (read aim-lock) and for screamers (they have explicit escape movement)
       const wobbling = e.arrived && !e.diving && !(e.type==='charger' && e.chargeLocked) && e.type !== 'screamer';
       if (wobbling) { e.wobble+=dt*1.2*e.wobbleDir; e.x+=Math.sin(e.wobble)*30*sM*dt; e.x=Phaser.Math.Clamp(e.x,20,W-20); }
+      // Ground creepers slowly advance toward the wall after arriving — reads as "moving closer".
+      // Stopped at y=600 so they don't crash through the player; perspective scaling kicks up size as they near.
+      if (GROUND_CREEPERS.has(e.type) && e.arrived && e.y < 600) { e.y += 9 * sM * dt; }
       if (e.type==='flyer'&&e.arrived&&!e.diving) { e.diveTimer-=delta; if(e.diveTimer<=0){e.diving=true;e.diveSpeed=200+this.wave*15;} }
       if (e.type==='charger'&&e.arrived&&!e.diving) {
         e.diveTimer-=delta;
@@ -1575,7 +1600,8 @@ class GameScene extends Phaser.Scene {
     // Wave complete — wait until ALL spawned enemies are dead (broodlings, sacs, etc all
     // increment/decrement enemiesRemaining in their spawn/kill paths). Inter-wave gap is
     // deliberately short so an active combo can survive into the next wave.
-    if (this.waveActive && this.enemiesRemaining <= 0) {
+    // pendingSpawn check prevents chain-firing during the post-startWave spawn delay.
+    if (this.waveActive && !this.pendingSpawn && this.enemiesRemaining <= 0) {
       this.waveActive = false;
       // Sprite images live outside the enemies group — clean them up before clearing.
       this.enemies.getChildren().forEach(eg => {
