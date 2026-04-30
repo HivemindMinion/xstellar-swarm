@@ -29,6 +29,7 @@
 //  v13: Mini-Queen boss wave (every 5th wave) + Broodlings
 //  v14: Brood Tyrant boss (wave 10/20/30 alternates with Queen)
 //  v15: Hive Architect boss (wave 15) — round-robin Q→T→A boss cycle
+//  v16: PER also -0.5% special CD/pt (caster build identity)
 // ============================================================
 
 const W = 480, H = 720;
@@ -57,7 +58,7 @@ const STAT_INFO = {
   agil:  { name: 'Agility',    desc: '+15 Move speed' },
   haste: { name: 'Haste',      desc: '-30ms attack delay, -0.5 dmg' },
   armor: { name: 'Armor',      desc: '+2% dmg reduction, -3 speed' },
-  per:   { name: 'Perception', desc: '+1% crit chance (cap 50%)' },
+  per:   { name: 'Perception', desc: '+1% crit, -0.5% special CD' },
   luk:   { name: 'Luck',       desc: '+5% crit damage (base 2x)' }
 };
 
@@ -258,6 +259,8 @@ function getFireDelay() { return Math.max(80, 400 - PLAYER.stats.haste * 30); }
 function getArmor()     { return Math.min(0.75, PLAYER.stats.armor * 0.02); }
 function getCritChance(){ return Math.min(0.5, (PLAYER.stats.per || 0) * 0.01); }
 function getCritDmg()   { return 2.0 + (PLAYER.stats.luk || 0) * 0.05; }
+// Special cooldown multiplier — Perception doubles as a focus stat for casters
+function getCooldownMult() { return Math.max(0.7, 1 - (PLAYER.stats.per || 0) * 0.005); }
 
 // Combo pierce: combat resource derived from kill streak
 // Pairs with mouse aim (line up enemies) and Volley (cone clears)
@@ -403,7 +406,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v15.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v16.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -549,12 +552,10 @@ class GameScene extends Phaser.Scene {
         const angle = baseAngle + t * spread * 2;
         this.spawnBullet(angle, data.dmgMult);
       }
-      this.specialCooldown = data.cd;
     }
     else if (specKey === 'knight') {
       // Shield Wall: invulnerability
       this.shieldWallActive = data.dur;
-      this.specialCooldown = data.cd;
     }
     else if (specKey === 'mage') {
       // Arcane Nova: AoE damage around player
@@ -571,15 +572,15 @@ class GameScene extends Phaser.Scene {
       // Visual: expanding ring
       const ring = this.add.graphics().setDepth(30);
       this.novaEffects.push({ gfx: ring, x: this.shipX, y: this.shipY, radius: 10, maxRadius: radius, life: 0.4 });
-      this.specialCooldown = data.cd;
     }
     else if (specKey === 'cleric') {
       // Divine Mend: heal
       const heal = this.maxHp * data.healPct;
       this.hp = Math.min(this.hp + heal, this.maxHp);
       this.spawnParticle(this.shipX, this.shipY, 0xffe066, 12);
-      this.specialCooldown = data.cd;
     }
+    // PER-scaled cooldown reduction (cap 30%)
+    this.specialCooldown = data.cd * getCooldownMult();
     this.updateHUD();
   }
 
@@ -1070,7 +1071,8 @@ class GameScene extends Phaser.Scene {
     if (PLAYER.activeSpecial) {
       const data = getSpecData(PLAYER.activeSpecial);
       if (data) {
-        const cdPct = Math.max(0, this.specialCooldown / data.cd);
+        const effectiveCD = data.cd * getCooldownMult();
+        const cdPct = Math.max(0, this.specialCooldown / effectiveCD);
         const barW = 60, barH = 4, barX = W/2 - barW/2, barY = H - 44;
         this.specialCdBar.fillStyle(0x1a1a1a, 0.6); this.specialCdBar.fillRect(barX, barY, barW, barH);
         if (cdPct > 0) { this.specialCdBar.fillStyle(0x663333, 0.8); this.specialCdBar.fillRect(barX, barY, barW * cdPct, barH); }
