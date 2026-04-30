@@ -6,6 +6,17 @@ The latest version is always at the top.
 
 ---
 
+## v27 — Performance pass: damage-number pool, per-frame caches
+
+### Changed
+- **Damage numbers now use an object pool of 24 pre-allocated `Text` objects** instead of `add.text() / destroy()` per hit. Phaser Text creation is expensive (font shaping + GPU upload); under Pierce III + Volley (11 arrows) you can spawn 30+ numbers in a single frame, which previously caused micro-stutters. Pool slots track a `until` timestamp so a saturated pool recycles the oldest slot (rare in practice).
+- **Per-frame caches at the top of the bullet-collision phase:** `getDamage()`, `getCritChance()`, `getCritDmg()` are read once per frame (not once per hit), and the live-shielder list is built once per frame instead of walking the entire enemies group on every bullet contact. With multiple shielders + Pierce + many enemies, the inner loop now scans only the (usually small) shielder set rather than every enemy for every bullet hit.
+
+### Removed
+- `isShieldedBy(e)` helper — replaced by the inlined cached-shielder loop in the bullet-collision check. Behavior identical, fewer iterations per hit.
+
+---
+
 ## v26 — Floating damage numbers
 
 ### Added

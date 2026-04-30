@@ -40,6 +40,7 @@
 //  v24: bug fixes — wave-chain, lingering corpses, perspective scaling
 //  v25: polish — pool cap, slower stagger, wider rows, wave hazard cleanup
 //  v26: floating damage numbers — every hit pops, crits gold and big
+//  v27: perf pass — dmg-number pool, per-frame shielder cache, cached stats
 // ============================================================
 
 const W = 480, H = 720;
@@ -448,7 +449,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v26.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v27.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -536,6 +537,16 @@ class GameScene extends Phaser.Scene {
     this.novaEffects = [];
     this.hitStop = 0; // ms of slow-mo on crit-kill (game feel)
     this.acidPools = []; // persistent ground hazards from missed Spitter shots
+    // Damage number pool — Phaser Text allocation is expensive (font shaping + GPU upload).
+    // Pre-allocate 24 hidden Text objects and recycle them via setText/setVisible.
+    this.dmgPool = [];
+    for (let i = 0; i < 24; i++) {
+      const t = this.add.text(0, 0, '', { fontSize: '13px', fontFamily: 'serif', color: '#ffffff', stroke: '#1a0a00', strokeThickness: 2, fontStyle: 'italic' }).setOrigin(0.5).setDepth(28).setVisible(false);
+      this.dmgPool.push({ obj: t, used: false, until: 0 });
+    }
+    // Per-frame caches; populated at the top of update() so hot collision loops avoid repeated lookups.
+    this._cachedShielders = [];
+    this._cachedDmg = 1; this._cachedCrit = 0; this._cachedCritDmg = 2;
 
     this.bullets = this.add.group();
     this.enemyBullets = this.add.group();
@@ -774,31 +785,32 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // True if enemy `e` is currently within 60px of any live Shielder (excluding itself)
-  isShieldedBy(e) {
-    const list = this.enemies.getChildren();
-    for (let i = 0; i < list.length; i++) {
-      const s = list[i].getData('enemy');
-      if (s && s.alive && s.type === 'shielder' && s !== e &&
-          Phaser.Math.Distance.Between(e.x, e.y, s.x, s.y) < 60) return true;
-    }
-    return false;
-  }
-
   spawnDmgNumber(x, y, amount, isCrit) {
-    // Floating damage indicator — rises and fades. Crits gold-and-large for impact.
+    // Pooled — find an idle slot, or recycle the oldest if all 24 are in flight.
+    let slot = this.dmgPool.find(s => !s.used);
+    if (!slot) {
+      slot = this.dmgPool[0];
+      for (let i = 1; i < this.dmgPool.length; i++) {
+        if (this.dmgPool[i].until < slot.until) slot = this.dmgPool[i];
+      }
+      this.tweens.killTweensOf(slot.obj);
+    }
+    slot.used = true;
+    const t = slot.obj;
     const n = Math.round(amount * 10) / 10;
-    const txt = this.add.text(x + Phaser.Math.Between(-6, 6), y - 6, isCrit ? `${n}!` : `${n}`, {
-      fontSize: isCrit ? '20px' : '13px',
-      fontFamily: 'serif',
-      color: isCrit ? '#ffe066' : '#ffffff',
-      stroke: '#1a0a00', strokeThickness: isCrit ? 3 : 2,
-      fontStyle: 'italic'
-    }).setOrigin(0.5).setDepth(28);
+    t.setText(isCrit ? `${n}!` : `${n}`);
+    t.setFontSize(isCrit ? 20 : 13);
+    t.setColor(isCrit ? '#ffe066' : '#ffffff');
+    t.setStroke('#1a0a00', isCrit ? 3 : 2);
+    const startY = y - 6;
+    t.setPosition(x + Phaser.Math.Between(-6, 6), startY);
+    t.setAlpha(1).setVisible(true);
+    const dur = isCrit ? 750 : 550;
+    slot.until = this.time.now + dur;
     this.tweens.add({
-      targets: txt, y: y - (isCrit ? 38 : 28), alpha: 0,
-      duration: isCrit ? 750 : 550, ease: 'Cubic.easeOut',
-      onComplete: () => txt.destroy()
+      targets: t, y: startY - (isCrit ? 32 : 22), alpha: 0,
+      duration: dur, ease: 'Cubic.easeOut',
+      onComplete: () => { slot.used = false; t.setVisible(false); }
     });
   }
 
@@ -1315,6 +1327,18 @@ class GameScene extends Phaser.Scene {
       }
     }
 
+    // Per-frame caches: avoids repeated PLAYER.stats lookups and walking the enemies group
+    // for shielder checks on every bullet hit. Recomputed once a frame is plenty.
+    this._cachedDmg = getDamage();
+    this._cachedCrit = getCritChance();
+    this._cachedCritDmg = getCritDmg();
+    this._cachedShielders.length = 0;
+    const _kids = this.enemies.getChildren();
+    for (let i = 0; i < _kids.length; i++) {
+      const s = _kids[i].getData('enemy');
+      if (s && s.alive && s.type === 'shielder') this._cachedShielders.push(s);
+    }
+
     // Player bullets — pierce-aware, crit-aware
     this.bullets.getChildren().forEach(b => {
       if (!b.active) return;
@@ -1331,10 +1355,15 @@ class GameScene extends Phaser.Scene {
           if (hits.includes(e)) return;
           hits.push(e);
           // Crit roll per hit (per-bullet would feel binary; per-hit lets pierce shots flicker)
-          const isCrit = Math.random() < getCritChance();
-          let dmg = getDamage() * (b.getData('dmgMult') || 1) * (isCrit ? getCritDmg() : 1);
-          // Shielder aura: enemies within 60px of a live Shielder take 50% reduced damage
-          if (e.type !== 'shielder' && this.isShieldedBy(e)) dmg *= 0.5;
+          const isCrit = Math.random() < this._cachedCrit;
+          let dmg = this._cachedDmg * (b.getData('dmgMult') || 1) * (isCrit ? this._cachedCritDmg : 1);
+          // Shielder aura — use cached list of live shielders; only walk that, not all enemies
+          if (e.type !== 'shielder' && this._cachedShielders.length > 0) {
+            for (let si = 0; si < this._cachedShielders.length; si++) {
+              const s = this._cachedShielders[si];
+              if (s !== e && Phaser.Math.Distance.Between(e.x, e.y, s.x, s.y) < 60) { dmg *= 0.5; break; }
+            }
+          }
           e.hp -= dmg;
           if (isCrit) { this.spawnParticle(e.x,e.y,0xffe066,8); this.spawnParticle(e.x,e.y-4,0xffffff,3); SFX.crit(); }
           else { this.spawnParticle(e.x,e.y,e.color,3); SFX.hit(); }
