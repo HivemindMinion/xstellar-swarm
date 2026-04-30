@@ -32,7 +32,7 @@ Each loop iteration:
 - [ ] **v15: Tone.js procedural SFX** — fire (twang), hit (chitin crack), crit (chime), kill (squish), wave start (drum), level up (bell), death (gong), special activate (per-class). Single CDN script tag, ~100 lines of code.
 - [x] **v8: Wave bands + extended flavor** — shipped. 8 bands, 25 flavor strings, HUD subtitle.
 - [ ] **v17: Faction codename + class lore on title** — "The Culigri Collective" tagline beneath subtitle. Class blurbs in select screen (1 line each, lore-grounded).
-- [ ] **v18: Hit-stop frames + screen flash** — on crit-kill: 30ms time freeze + brief white screen flash. Game-feel upgrade, ~15 lines.
+- [x] **v9: Hit-stop + camera flash on crit-kill** — shipped. 70ms slow-mo at 8% time + 60ms gold flash.
 - [ ] **v19: Sprite swap for 3 base enemies** — downscale `Processed/NewDroneSprite.png`, `NewFlyerSprite.png`, `NewSpitterSprite.png` to 64×64 PNGs in `assets/enemies/`. Swap drawEnemy() to use Phaser images for those types; keep procedural fallback.
 
 ### Heavier mechanics — defer until above land

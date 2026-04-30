@@ -21,6 +21,7 @@
 //      crit kills accelerate the v6 combo pierce ladder
 //  v8: wave bands ("The Outer Walls" → "World-Ender Epoch")
 //      + 25 lore-grounded flavor strings; HUD subtitle
+//  v9: hit-stop + camera flash on crit-kill (game-feel)
 // ============================================================
 
 const W = 480, H = 720;
@@ -361,7 +362,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>this.scene.start('ClassSelectScene'));
       this.input.on('pointerdown',()=>this.scene.start('ClassSelectScene'));
     }
-    this.add.text(W/2,H-30,'v8.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v9.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -440,6 +441,7 @@ class GameScene extends Phaser.Scene {
     this.specialCooldown = 0;
     this.shieldWallActive = 0; // remaining shield wall duration
     this.novaEffects = [];
+    this.hitStop = 0; // ms of slow-mo on crit-kill (game feel)
 
     this.bullets = this.add.group();
     this.enemyBullets = this.add.group();
@@ -797,7 +799,10 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta) {
-    const dt = delta/1000;
+    // Hit-stop: scale world-time during the slow-mo window. Input/aim still tick
+    // at real time (handled below) so the player doesn't feel input lag.
+    let dt = delta/1000;
+    if (this.hitStop > 0) { this.hitStop -= delta; dt *= 0.08; }
     updateTorches(this.torches, time);
     updateFieldDebris(this.debris, delta);
 
@@ -869,7 +874,11 @@ class GameScene extends Phaser.Scene {
           if (e.hp<=0) {
             e.alive=false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6);
             e.gfx.clear(); this.kills++; this.enemiesRemaining--;
-            // Crit kills jump combo by 2 — accelerates pierce ladder
+            // Crit kills: jump combo by 2 + brief slow-mo flash for impact
+            if (isCrit) {
+              this.cameras.main.flash(60, 255, 230, 110, false);
+              this.hitStop = Math.max(this.hitStop, 70);
+            }
             this.gainXP(e.xpValue, isCrit ? 2 : 1);
           }
           const remaining = b.getData('pierce') || 0;
