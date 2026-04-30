@@ -31,6 +31,7 @@
 //  v15: Hive Architect boss (wave 15) — round-robin Q→T→A boss cycle
 //  v16: PER also -0.5% special CD/pt (caster build identity)
 //  v17: Screamer enemy — runs AWAY, screams broodlings if it escapes
+//  v18: Faction codename + lore-grounded class descriptions
 // ============================================================
 
 const W = 480, H = 720;
@@ -46,11 +47,12 @@ const PAL = {
 };
 
 // ── RPG CLASSES (starting identity + base stats) ────────────
+// Class descriptions are lore-grounded one-liners from the Culigri canon.
 const CLASSES = {
-  ranger:  { name: 'Ranger',  desc: 'Swift bow. Rains arrows like a storm.',       color: 0x6b8e23, accent: '#8fbc3a', base: { fort: 6, might: 4, agil: 5, haste: 6, armor: 1, per: 3, luk: 1 } },
-  knight:  { name: 'Knight',  desc: 'Iron will. The wall behind the wall.',         color: 0x7089a8, accent: '#8ca8cc', base: { fort: 12, might: 3, agil: 3, haste: 2, armor: 5, per: 1, luk: 1 } },
-  mage:    { name: 'Mage',    desc: 'Arcane bolts. Fragile but devastating.',       color: 0x7b4faa, accent: '#a06fdd', base: { fort: 5, might: 6, agil: 4, haste: 4, armor: 2, per: 2, luk: 3 } },
-  cleric:  { name: 'Cleric',  desc: 'Holy light. Balanced, blessed, unyielding.',   color: 0xc9a84c, accent: '#e8c95a', base: { fort: 9, might: 3, agil: 4, haste: 3, armor: 5, per: 1, luk: 2 } }
+  ranger:  { name: 'Ranger',  desc: 'The swift survivor. Rains arrows like the storm before the swarm.',     color: 0x6b8e23, accent: '#8fbc3a', base: { fort: 6, might: 4, agil: 5, haste: 6, armor: 1, per: 3, luk: 1 } },
+  knight:  { name: 'Knight',  desc: 'The iron wall. Last line of defense; armor thickens with every life saved.', color: 0x7089a8, accent: '#8ca8cc', base: { fort: 12, might: 3, agil: 3, haste: 2, armor: 5, per: 1, luk: 1 } },
+  mage:    { name: 'Mage',    desc: 'The arcane scholar. Magic flows from Seeds left by the Culigri themselves.', color: 0x7b4faa, accent: '#a06fdd', base: { fort: 5, might: 6, agil: 4, haste: 4, armor: 2, per: 2, luk: 3 } },
+  cleric:  { name: 'Cleric',  desc: 'The blessed protector. Holy light burns where no ordinary flame can touch.', color: 0xc9a84c, accent: '#e8c95a', base: { fort: 9, might: 3, agil: 4, haste: 3, armor: 5, per: 1, luk: 2 } }
 };
 
 const STAT_INFO = {
@@ -374,7 +376,8 @@ class TitleScene extends Phaser.Scene {
 
     this.add.text(W/2,120,'XSTELLAR',{fontSize:'48px',fontFamily:'serif',color:PAL.accent,stroke:'#3e2800',strokeThickness:4}).setOrigin(0.5);
     this.add.text(W/2,178,'— S W A R M —',{fontSize:'24px',fontFamily:'serif',color:PAL.text,stroke:'#1a1408',strokeThickness:2}).setOrigin(0.5);
-    this.add.text(W/2,230,'Defend the Keep',{fontSize:'14px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5);
+    this.add.text(W/2,222,'Defend the Keep',{fontSize:'14px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'}).setOrigin(0.5);
+    this.add.text(W/2,242,'The Culigri Collective approaches.',{fontSize:'11px',fontFamily:'serif',color:'#6a3a44',fontStyle:'italic'}).setOrigin(0.5);
 
     const dec = this.add.graphics(); dec.lineStyle(2,PAL.gold,0.6);
     dec.moveTo(W/2-40,260); dec.lineTo(W/2+40,290); dec.moveTo(W/2+40,260); dec.lineTo(W/2-40,290); dec.strokePath();
@@ -407,7 +410,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v17.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v18.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 

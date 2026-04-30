@@ -31,7 +31,7 @@ Each loop iteration:
 ### Polish & feel — high-impact, low-risk
 - [x] **v12: Tone.js procedural SFX** — shipped. 8 sounds (fire pluck, hit pink-noise, crit FM bell, kill brown-noise, wave drum, level-up bell arpeggio, death gong, special FM flourish). Init on first user gesture; silent fallback if Tone.js fails to load. Throttled hit/kill at 40/60ms to avoid noise spam.
 - [x] **v8: Wave bands + extended flavor** — shipped. 8 bands, 25 flavor strings, HUD subtitle.
-- [ ] **v17: Faction codename + class lore on title** — "The Culigri Collective" tagline beneath subtitle. Class blurbs in select screen (1 line each, lore-grounded).
+- [x] **v18: Faction codename + lore-grounded class descs** — shipped. "The Culigri Collective approaches." tagline on title; CLASSES.desc replaced with full lore one-liners visible on the class-select cards.
 - [x] **v9: Hit-stop + camera flash on crit-kill** — shipped. 70ms slow-mo at 8% time + 60ms gold flash.
 - [ ] **v19: Sprite swap for 3 base enemies** — downscale `Processed/NewDroneSprite.png`, `NewFlyerSprite.png`, `NewSpitterSprite.png` to 64×64 PNGs in `assets/enemies/`. Swap drawEnemy() to use Phaser images for those types; keep procedural fallback.
 
