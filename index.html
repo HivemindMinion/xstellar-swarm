@@ -14,10 +14,11 @@
 <body>
 <script>
 // ============================================================
-//  XSTELLAR: SWARM — CASTLE DEFENSE  v6
+//  XSTELLAR: SWARM — CASTLE DEFENSE  v7
 //  Medieval Galaga × RPG × Survival
 //  Humans vs. Bugs — Defend the Keep
-//  v6: stat tradeoffs + combo pierce (depth, not features)
+//  v7: crit chance + crit damage (Perception, Luck)
+//      crit kills accelerate the v6 combo pierce ladder
 // ============================================================
 
 const W = 480, H = 720;
@@ -34,18 +35,20 @@ const PAL = {
 
 // ── RPG CLASSES (starting identity + base stats) ────────────
 const CLASSES = {
-  ranger:  { name: 'Ranger',  desc: 'Swift bow. Rains arrows like a storm.',       color: 0x6b8e23, accent: '#8fbc3a', base: { fort: 6, might: 4, agil: 5, haste: 6, armor: 1 } },
-  knight:  { name: 'Knight',  desc: 'Iron will. The wall behind the wall.',         color: 0x7089a8, accent: '#8ca8cc', base: { fort: 12, might: 3, agil: 3, haste: 2, armor: 5 } },
-  mage:    { name: 'Mage',    desc: 'Arcane bolts. Fragile but devastating.',       color: 0x7b4faa, accent: '#a06fdd', base: { fort: 5, might: 6, agil: 4, haste: 4, armor: 2 } },
-  cleric:  { name: 'Cleric',  desc: 'Holy light. Balanced, blessed, unyielding.',   color: 0xc9a84c, accent: '#e8c95a', base: { fort: 9, might: 3, agil: 4, haste: 3, armor: 5 } }
+  ranger:  { name: 'Ranger',  desc: 'Swift bow. Rains arrows like a storm.',       color: 0x6b8e23, accent: '#8fbc3a', base: { fort: 6, might: 4, agil: 5, haste: 6, armor: 1, per: 3, luk: 1 } },
+  knight:  { name: 'Knight',  desc: 'Iron will. The wall behind the wall.',         color: 0x7089a8, accent: '#8ca8cc', base: { fort: 12, might: 3, agil: 3, haste: 2, armor: 5, per: 1, luk: 1 } },
+  mage:    { name: 'Mage',    desc: 'Arcane bolts. Fragile but devastating.',       color: 0x7b4faa, accent: '#a06fdd', base: { fort: 5, might: 6, agil: 4, haste: 4, armor: 2, per: 2, luk: 3 } },
+  cleric:  { name: 'Cleric',  desc: 'Holy light. Balanced, blessed, unyielding.',   color: 0xc9a84c, accent: '#e8c95a', base: { fort: 9, might: 3, agil: 4, haste: 3, armor: 5, per: 1, luk: 2 } }
 };
 
 const STAT_INFO = {
-  fort:  { name: 'Fortitude', desc: '+5 Max HP' },
-  might: { name: 'Might',     desc: '+1 Damage' },
-  agil:  { name: 'Agility',   desc: '+15 Move speed' },
-  haste: { name: 'Haste',     desc: '-30ms attack delay, -0.5 dmg' },
-  armor: { name: 'Armor',     desc: '+2% dmg reduction, -3 speed' }
+  fort:  { name: 'Fortitude',  desc: '+5 Max HP' },
+  might: { name: 'Might',      desc: '+1 Damage' },
+  agil:  { name: 'Agility',    desc: '+15 Move speed' },
+  haste: { name: 'Haste',      desc: '-30ms attack delay, -0.5 dmg' },
+  armor: { name: 'Armor',      desc: '+2% dmg reduction, -3 speed' },
+  per:   { name: 'Perception', desc: '+1% crit chance (cap 50%)' },
+  luk:   { name: 'Luck',       desc: '+5% crit damage (base 2x)' }
 };
 
 // ── CLASS SPECIALIZATIONS ───────────────────────────────────
@@ -108,8 +111,8 @@ function xpForLevel(lv) { return lv * 80 + 20; }
 let PLAYER = null;
 
 const SaveManager = {
-  KEY: 'xstellar_swarm_v6',
-  OLD_KEYS: ['xstellar_swarm_v5'],
+  KEY: 'xstellar_swarm_v7',
+  OLD_KEYS: ['xstellar_swarm_v6', 'xstellar_swarm_v5'],
   migrate() {
     try {
       if (localStorage.getItem(this.KEY) !== null) return;
@@ -151,10 +154,13 @@ function loadPlayer() {
   const d = SaveManager.load();
   if (!d || !CLASSES[d.classKey]) return false;
   const c = CLASSES[d.classKey];
+  // Merge class base under saved stats so stats added in newer versions (e.g. v7 per/luk)
+  // get sane defaults instead of NaN.
+  const mergedStats = { ...c.base, ...(d.stats || {}) };
   PLAYER = {
     classKey: d.classKey, className: c.name, color: c.color,
     level: d.level || 1, xp: d.xp || 0, statPoints: d.statPoints || 0,
-    stats: d.stats || { ...c.base },
+    stats: mergedStats,
     classSpecs: d.classSpecs || { ranger: 0, knight: 0, mage: 0, cleric: 0 },
     activeSpecial: d.activeSpecial || null,
     totalKills: d.totalKills || 0, wavesCleared: 0,
@@ -168,6 +174,8 @@ function getDamage()    { return Math.max(1, 1 + PLAYER.stats.might - PLAYER.sta
 function getMoveSpeed() { return Math.max(60, 120 + PLAYER.stats.agil * 15 - PLAYER.stats.armor * 3); }
 function getFireDelay() { return Math.max(80, 400 - PLAYER.stats.haste * 30); }
 function getArmor()     { return Math.min(0.75, PLAYER.stats.armor * 0.02); }
+function getCritChance(){ return Math.min(0.5, (PLAYER.stats.per || 0) * 0.01); }
+function getCritDmg()   { return 2.0 + (PLAYER.stats.luk || 0) * 0.05; }
 
 // Combo pierce: combat resource derived from kill streak
 // Pairs with mouse aim (line up enemies) and Volley (cone clears)
@@ -309,7 +317,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>this.scene.start('ClassSelectScene'));
       this.input.on('pointerdown',()=>this.scene.start('ClassSelectScene'));
     }
-    this.add.text(W/2,H-30,'v6.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v7.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -329,8 +337,8 @@ class ClassSelectScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const keys = Object.keys(CLASSES), cardH = 130, startY = 90;
-    const statKeys = ['fort','might','agil','haste','armor'];
-    const statNames = ['FOR','MIG','AGI','HAS','ARM'];
+    const statKeys = ['fort','might','agil','haste','armor','per','luk'];
+    const statNames = ['FOR','MIG','AGI','HAS','ARM','PER','LUK'];
 
     keys.forEach((key, i) => {
       const c = CLASSES[key], y = startY + i * (cardH + 14);
@@ -345,10 +353,10 @@ class ClassSelectScene extends Phaser.Scene {
 
       const barY = y + 80;
       statKeys.forEach((sk,si) => {
-        const bx = 115+si*62;
+        const bx = 115+si*45;
         this.add.text(bx,barY,statNames[si],{fontSize:'8px',fontFamily:'serif',color:'#665a44'});
-        this.add.graphics().fillStyle(0x2a2418,1).fillRect(bx,barY+12,50,5);
-        this.add.graphics().fillStyle(c.color,0.8).fillRect(bx,barY+12,50*(c.base[sk]/8),5);
+        this.add.graphics().fillStyle(0x2a2418,1).fillRect(bx,barY+12,36,5);
+        this.add.graphics().fillStyle(c.color,0.8).fillRect(bx,barY+12,36*((c.base[sk]||0)/8),5);
       });
 
       const zone = this.add.zone(30,y,W-60,cardH).setOrigin(0,0).setInteractive({useHandCursor:true});
@@ -643,8 +651,8 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  gainXP(amount) {
-    this.combo++; this.comboTimer = 2;
+  gainXP(amount, comboGain = 1) {
+    this.combo += comboGain; this.comboTimer = 2;
     PLAYER.xp += Math.floor(amount * (1 + this.combo * 0.05));
     if (this.combo >= 3) {
       const p = comboPierceFor(this.combo);
@@ -785,7 +793,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Player bullets — pierce-aware
+    // Player bullets — pierce-aware, crit-aware
     this.bullets.getChildren().forEach(b => {
       if (!b.active) return;
       b.x += b.getData('vx')*dt; b.y += b.getData('vy')*dt;
@@ -798,11 +806,17 @@ class GameScene extends Phaser.Scene {
           const hits = b.getData('hits');
           if (hits.includes(e)) return;
           hits.push(e);
-          e.hp -= getDamage() * (b.getData('dmgMult') || 1);
-          this.spawnParticle(e.x,e.y,e.color,3);
+          // Crit roll per hit (per-bullet would feel binary; per-hit lets pierce shots flicker)
+          const isCrit = Math.random() < getCritChance();
+          const dmg = getDamage() * (b.getData('dmgMult') || 1) * (isCrit ? getCritDmg() : 1);
+          e.hp -= dmg;
+          if (isCrit) { this.spawnParticle(e.x,e.y,0xffe066,8); this.spawnParticle(e.x,e.y-4,0xffffff,3); }
+          else this.spawnParticle(e.x,e.y,e.color,3);
           if (e.hp<=0) {
             e.alive=false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6);
-            e.gfx.clear(); this.kills++; this.enemiesRemaining--; this.gainXP(e.xpValue);
+            e.gfx.clear(); this.kills++; this.enemiesRemaining--;
+            // Crit kills jump combo by 2 — accelerates pierce ladder
+            this.gainXP(e.xpValue, isCrit ? 2 : 1);
           }
           const remaining = b.getData('pierce') || 0;
           if (remaining <= 0) { b.destroy(); return; }
@@ -883,18 +897,18 @@ class LevelUpScene extends Phaser.Scene {
     this.pointsText = this.add.text(W/2,52,`Points: ${PLAYER.statPoints}`,{fontSize:'14px',fontFamily:'serif',color:PAL.text}).setOrigin(0.5);
 
     // ── STATS SECTION ──
-    this.add.text(W/2,78,'— Attributes —',{fontSize:'12px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5);
-    const statKeys = ['fort','might','agil','haste','armor'];
+    this.add.text(W/2,72,'— Attributes —',{fontSize:'12px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5);
+    const statKeys = ['fort','might','agil','haste','armor','per','luk'];
     this.btns = [];
 
     statKeys.forEach((key, i) => {
-      const y = 100 + i * 40;
+      const y = 90 + i * 32;
       const info = STAT_INFO[key];
       const accent = CLASSES[PLAYER.classKey].accent;
-      this.add.text(30,y,info.name,{fontSize:'13px',fontFamily:'serif',color:accent});
-      this.add.text(30,y+16,info.desc,{fontSize:'9px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'});
-      const vt = this.add.text(320,y,`${PLAYER.stats[key]}`,{fontSize:'15px',fontFamily:'serif',color:PAL.text});
-      const btn = this.add.text(370,y-2,'[ + ]',{fontSize:'15px',fontFamily:'serif',color:'#6b8e23'}).setInteractive({useHandCursor:true});
+      this.add.text(30,y,info.name,{fontSize:'12px',fontFamily:'serif',color:accent});
+      this.add.text(30,y+13,info.desc,{fontSize:'8px',fontFamily:'serif',color:PAL.textDim,fontStyle:'italic'});
+      const vt = this.add.text(320,y,`${PLAYER.stats[key]}`,{fontSize:'14px',fontFamily:'serif',color:PAL.text});
+      const btn = this.add.text(370,y-1,'[ + ]',{fontSize:'14px',fontFamily:'serif',color:'#6b8e23'}).setInteractive({useHandCursor:true});
       this.btns.push(btn);
       btn.on('pointerover',()=>btn.setColor('#8fbc3a')); btn.on('pointerout',()=>btn.setColor('#6b8e23'));
       btn.on('pointerdown',()=>{
@@ -993,17 +1007,17 @@ class GameOverScene extends Phaser.Scene {
     // Attributes
     const line2 = this.add.graphics(); line2.lineStyle(1,PAL.gold,0.2); line2.moveTo(80,315); line2.lineTo(W-80,315); line2.strokePath();
     this.add.text(W/2,325,'— Attributes —',{fontSize:'11px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'}).setOrigin(0.5);
-    ['fort','might','agil','haste','armor'].forEach((key,i)=>{
-      const y=345+i*20;
+    ['fort','might','agil','haste','armor','per','luk'].forEach((key,i)=>{
+      const y=343+i*16;
       this.add.text(100,y,STAT_INFO[key].name,{fontSize:'11px',fontFamily:'serif',color:PAL.textDim});
-      this.add.text(W-100,y,`${PLAYER.stats[key]}`,{fontSize:'11px',fontFamily:'serif',color:accent}).setOrigin(1,0);
+      this.add.text(W-100,y,`${PLAYER.stats[key] || 0}`,{fontSize:'11px',fontFamily:'serif',color:accent}).setOrigin(1,0);
     });
 
     // Masteries
-    this.add.text(W/2,455,'— Masteries —',{fontSize:'11px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'}).setOrigin(0.5);
+    this.add.text(W/2,463,'— Masteries —',{fontSize:'11px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic'}).setOrigin(0.5);
     const specKeys = ['ranger','knight','mage','cleric'];
     specKeys.forEach((key,i)=>{
-      const y=475+i*20, lv=getSpecLevel(key);
+      const y=483+i*20, lv=getSpecLevel(key);
       if (lv>0) {
         this.add.text(100,y,`${CLASS_SPECS[key].special}`,{fontSize:'11px',fontFamily:'serif',color:CLASS_SPECS[key].accent});
         this.add.text(W-100,y,`Lv ${lv}`,{fontSize:'11px',fontFamily:'serif',color:CLASS_SPECS[key].accent}).setOrigin(1,0);

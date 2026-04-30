@@ -49,6 +49,16 @@ Multi-spec into different classes to unlock multiple specials, then swap between
 - Stats persist between runs (roguelite loop)
 - localStorage persistence (Firebase-ready `SaveManager` interface)
 
+### Crit (v7)
+Two new attributes split the crit dial:
+
+| Stat | Effect |
+|------|--------|
+| Perception | +1% crit chance per point (cap 50%) |
+| Luck | +5% crit damage per point (base 2.0×) |
+
+Crits spawn yellow particles and **count as 2 combo** instead of 1 — fast-tracking the v6 pierce ladder. Crit-fishing builds (high PER + LUK) reach Pierce III on shorter kill streaks; consistent-damage builds (high MIG) hit harder on every shot.
+
 ### Stat Tradeoffs (v6)
 Allocation is a real choice — some stats compete:
 
