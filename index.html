@@ -34,6 +34,7 @@
 //  v18: Faction codename + lore-grounded class descriptions
 //  v19: Elite modifiers — Berserk / Speedy / Regen (replay variety)
 //  v20: Wraith enemy — phase-teleports, intangible during phase
+//  v21: Shielder + Resonator — support auras (50% DR / 1 HP/s heal)
 // ============================================================
 
 const W = 480, H = 720;
@@ -420,7 +421,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v20.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v21.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -739,6 +740,17 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // True if enemy `e` is currently within 60px of any live Shielder (excluding itself)
+  isShieldedBy(e) {
+    const list = this.enemies.getChildren();
+    for (let i = 0; i < list.length; i++) {
+      const s = list[i].getData('enemy');
+      if (s && s.alive && s.type === 'shielder' && s !== e &&
+          Phaser.Math.Distance.Between(e.x, e.y, s.x, s.y) < 60) return true;
+    }
+    return false;
+  }
+
   spawnAcidPool(x, y) {
     // Pre-generate bubble offsets so the visual is stable, not flickering each frame
     const bubbles = [];
@@ -833,6 +845,8 @@ class GameScene extends Phaser.Scene {
         if (this.wave>=5&&Math.random()<0.15) type='spitter';
         if (this.wave>=6&&Math.random()<0.10) type='screamer';
         if (this.wave>=7&&Math.random()<0.10) type='wraith';
+        if (this.wave>=8&&Math.random()<0.08) type='shielder';
+        if (this.wave>=8&&Math.random()<0.08) type='resonator';
         this.spawnEnemy(ex,ey,ty,type,spawned*70); spawned++;
       }
     }
@@ -868,9 +882,9 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnEnemy(x,startY,targetY,type,delay) {
-    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a,tyrant:0x6a1144,eggsac:0x4a0a22,architect:0x8a6a1a,screamer:0xddcc66,wraith:0x6a7aaa};
-    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1,tyrant:100+this.wave*10,eggsac:4,architect:80+this.wave*9,screamer:5+this.wave,wraith:4+this.wave};
-    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5,tyrant:120,eggsac:6,architect:100,screamer:18,wraith:20};
+    const colors={crawler:0x5a8a2a,flyer:0x9a7a22,spitter:0x8a3322,charger:0x6a1a0a,queen:0x8a1a44,broodling:0x4a7a1a,tyrant:0x6a1144,eggsac:0x4a0a22,architect:0x8a6a1a,screamer:0xddcc66,wraith:0x6a7aaa,shielder:0x6688aa,resonator:0x66aa88};
+    const hpMap={crawler:2+this.wave,flyer:1+this.wave,spitter:3+this.wave,charger:4+Math.floor(this.wave*1.5),queen:60+this.wave*8,broodling:1,tyrant:100+this.wave*10,eggsac:4,architect:80+this.wave*9,screamer:5+this.wave,wraith:4+this.wave,shielder:6+this.wave,resonator:6+this.wave};
+    const xpMap={crawler:8,flyer:12,spitter:15,charger:14,queen:80,broodling:5,tyrant:120,eggsac:6,architect:100,screamer:18,wraith:20,shielder:22,resonator:22};
     const isBoss = type==='queen' || type==='tyrant' || type==='architect';
     const g = this.add.graphics().setDepth(isBoss?12:10);
     let initSpawnTimer = 0;
@@ -880,7 +894,7 @@ class GameScene extends Phaser.Scene {
     // Elite roll: 6% chance on regular enemies (skip bosses, sacs, broodlings) wave 4+
     const eliteEligible = !isBoss && type !== 'eggsac' && type !== 'broodling';
     const elite = (eliteEligible && this.wave >= 4 && Math.random() < 0.06) ? Phaser.Utils.Array.GetRandom(ELITE_KEYS) : null;
-    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0,phaseTimer:type==='wraith'?Phaser.Math.Between(1500,3000):0,phasedOut:false,phaseFadeT:0};
+    const enemy = {gfx:g,x,y:startY,targetY,type,hp:hpMap[type],maxHp:hpMap[type],xpValue:xpMap[type] * (elite ? 2 : 1),color:colors[type],arrived:false,diveTimer: type==='charger' ? Phaser.Math.Between(2000,3500) : 0,diving:false,diveSpeed:0,shootTimer:Phaser.Math.Between(1500,3500),wobble:0,wobbleDir:Math.random()<0.5?1:-1,legPhase:Math.random()*Math.PI*2,alive:true,chargeAngle:0,chargeLocked:false,spawnTimer:initSpawnTimer,hatchTimer:type==='eggsac'?3000:0,anchorIdx:-1,escapeTimer:type==='screamer'?12000:0,elite,regenTimer:0,phaseTimer:type==='wraith'?Phaser.Math.Between(1500,3000):0,phasedOut:false,phaseFadeT:0,auraTimer:0};
     const tweenDur = isBoss ? 1500 : 900;
     this.time.delayedCall(delay,()=>{this.tweens.add({targets:enemy,y:targetY,duration:tweenDur,ease:'Back.easeOut',onComplete:()=>{enemy.arrived=true;}});});
     this.enemies.add(g); g.setData('enemy',enemy);
@@ -1025,6 +1039,43 @@ class GameScene extends Phaser.Scene {
         e.gfx.moveTo(x+3, y-7); e.gfx.lineTo(x+5, y+6);
         e.gfx.strokePath();
       }
+    } else if (e.type==='shielder') {
+      // Defensive support — pulsing blue aura, dome shell, low body
+      const auraPulse = 0.16 + Math.sin(time*0.005)*0.08;
+      e.gfx.fillStyle(0x4488cc, auraPulse); e.gfx.fillCircle(x, y, 60);
+      e.gfx.lineStyle(1, 0x88aaff, 0.35); e.gfx.strokeCircle(x, y, 60);
+      // Body
+      e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 22, 18);
+      // Dome shell (this is what generates the aura)
+      e.gfx.fillStyle(0xaaccff, 0.55); e.gfx.fillEllipse(x, y-7, 18, 11);
+      e.gfx.fillStyle(0xccddff, 0.3); e.gfx.fillEllipse(x, y-9, 12, 6);
+      // Eyes
+      e.gfx.fillStyle(0x88ccff, 1); e.gfx.fillCircle(x-4, y-1, 1.8); e.gfx.fillCircle(x+4, y-1, 1.8);
+      // Legs
+      e.gfx.lineStyle(1, e.color, 0.85);
+      for (let s=-1; s<=1; s+=2) {
+        e.gfx.moveTo(x+s*10, y); e.gfx.lineTo(x+s*15, y+5+lo);
+        e.gfx.moveTo(x+s*10, y+5); e.gfx.lineTo(x+s*15, y+9-lo);
+      }
+      e.gfx.strokePath();
+    } else if (e.type==='resonator') {
+      // Healing support — pulsing green aura, vibrating crystal facets
+      const auraPulse = 0.14 + Math.sin(time*0.008)*0.07;
+      e.gfx.fillStyle(0x44aa88, auraPulse); e.gfx.fillCircle(x, y, 60);
+      e.gfx.lineStyle(1, 0x88ffcc, 0.35); e.gfx.strokeCircle(x, y, 60);
+      // Body
+      e.gfx.fillStyle(e.color, 1); e.gfx.fillEllipse(x, y, 18, 18);
+      // Crystal wing-plates (vibrating)
+      const ePulse = 0.5 + Math.sin(time*0.012 + e.legPhase)*0.25;
+      e.gfx.fillStyle(0x88ffcc, 0.5 * ePulse);
+      e.gfx.fillTriangle(x-8, y-2, x-15, y-9, x-13, y+5);
+      e.gfx.fillTriangle(x+8, y-2, x+15, y-9, x+13, y+5);
+      // Eyes
+      e.gfx.fillStyle(0x88ffcc, 1); e.gfx.fillCircle(x-3, y-2, 1.7); e.gfx.fillCircle(x+3, y-2, 1.7);
+      // Legs
+      e.gfx.lineStyle(1, e.color, 0.85);
+      for (let s=-1; s<=1; s+=2) { e.gfx.moveTo(x+s*8, y+3); e.gfx.lineTo(x+s*12, y+8+lo); }
+      e.gfx.strokePath();
     } else if (e.type==='wraith') {
       // Phased state heavily fades the body but leaves a faint outline so the player
       // can still read where the wraith currently is (and predict the next bullet window).
@@ -1178,7 +1229,9 @@ class GameScene extends Phaser.Scene {
           hits.push(e);
           // Crit roll per hit (per-bullet would feel binary; per-hit lets pierce shots flicker)
           const isCrit = Math.random() < getCritChance();
-          const dmg = getDamage() * (b.getData('dmgMult') || 1) * (isCrit ? getCritDmg() : 1);
+          let dmg = getDamage() * (b.getData('dmgMult') || 1) * (isCrit ? getCritDmg() : 1);
+          // Shielder aura: enemies within 60px of a live Shielder take 50% reduced damage
+          if (e.type !== 'shielder' && this.isShieldedBy(e)) dmg *= 0.5;
           e.hp -= dmg;
           if (isCrit) { this.spawnParticle(e.x,e.y,0xffe066,8); this.spawnParticle(e.x,e.y-4,0xffffff,3); SFX.crit(); }
           else { this.spawnParticle(e.x,e.y,e.color,3); SFX.hit(); }
@@ -1236,6 +1289,21 @@ class GameScene extends Phaser.Scene {
           e.hp = Math.min(e.maxHp, e.hp + ELITE_MODS.regen.hpRegen);
           e.regenTimer = 1000;
           this.spawnParticle(e.x, e.y - 6, 0x44ff66, 2);
+        }
+      }
+      // Resonator: heal nearby allies 1 HP/s in 60px aura
+      if (e.type === 'resonator' && e.arrived) {
+        e.auraTimer -= delta;
+        if (e.auraTimer <= 0) {
+          e.auraTimer = 1000;
+          this.enemies.getChildren().forEach(otg => {
+            const o = otg.getData('enemy');
+            if (o && o.alive && o !== e && o.hp < o.maxHp &&
+                Phaser.Math.Distance.Between(e.x, e.y, o.x, o.y) < 60) {
+              o.hp = Math.min(o.maxHp, o.hp + 1);
+              this.spawnParticle(o.x, o.y - 6, 0x88ffcc, 2);
+            }
+          });
         }
       }
       // Idle wobble — disabled for chargers during telegraph (read aim-lock) and for screamers (they have explicit escape movement)

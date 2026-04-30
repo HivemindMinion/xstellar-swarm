@@ -39,7 +39,7 @@ Each loop iteration:
 - [x] **v20: Wraith enemy** — shipped. Wave 7+, 10% spawn weight. Phase-cycles 2-4s; teleports 80-180px while phased; bullets pass through phased wraiths.
 - [ ] **v21: Burrower enemy** — 2s underground (invuln), emerges adjacent to player with telegraph ring 0.5s before.
 - [ ] **v22: Carrier enemy** — drops 1 egg every 5s as it moves; eggs hatch into broodlings (1 HP, fast) after 2s.
-- [ ] **v23: Shielder/Resonator support orbits** — non-attacking enemies that grant nearby bugs +damage or HP regen aura. Forces target-priority decisions.
+- [x] **v21: Shielder + Resonator support enemies** — shipped. Wave 8+, 8% spawn each. Shielder gives 50% damage reduction to bugs in 60px aura; Resonator heals nearby bugs 1 HP/s. Target-priority shift: kill the support first.
 - [x] **v19: Elite modifiers** — shipped. 6% roll on regular enemies wave 4+; 3 mods (Berserk +50% contact dmg, Speedy +40% move, Regen +1 HP/s). Pulsing colored halo marks the mod. 2x XP on kill. Shielded mod deferred.
 
 ### Skip / defer (scope creep — Connor flagged "depth ≠ complexity")
