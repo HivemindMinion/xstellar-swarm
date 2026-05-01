@@ -6,6 +6,21 @@ The latest version is always at the top.
 
 ---
 
+## v37 — Burrower enemy (intangible while underground)
+
+### Added
+- **Burrower** (wave 9+, 8% spawn weight, 5+wave HP, 22 XP) — cycles between two states:
+  - **Burrowed** (3 seconds, intangible): sprite fades to 22% alpha, can't be hit. A dirt-mound indicator pulses underneath so the player can see where it'll surface; brightens noticeably in the last 600ms before surfacing.
+  - **Surfaced** (1.5 seconds, vulnerable): full alpha, advances briskly toward the player (38 px/s vertical + 22 px/s horizontal tracking). This is the kill window.
+- Reuses the v20 Wraith `phasedOut` flag so the existing bullet-collision guard (`if (e.phasedOut) return`) makes underground burrowers untargetable without adding a new code path.
+- Dirt-particle puffs (`0x6b5334` + `0x4a3a25`) on every state transition give clear visual feedback that the cycle flipped.
+- New `burrower.png` sprite (96×88, 18KB) downscaled from `Processed/NewBurrowerSprite.png`. Added to `SPRITE_TYPES` / `SPRITE_SIZES` / `GROUND_TYPES`.
+
+### Changed
+- Closes the original RESEARCH_NOTES backlog: ambush-pattern enemy that punishes static positioning and rewards reading the dirt-mound telegraph.
+
+---
+
 ## v36 — Wave-clear flash between waves
 
 ### Added
