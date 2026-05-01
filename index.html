@@ -46,6 +46,7 @@
 //  v30: pause menu — P or Esc to pause / resume the run
 //  v31: ambient music — slow ominous drone via Tone.js
 //  v32: HUD readout for crit chance + cooldown reduction
+//  v33: HiDPI text — setResolution(dpr) so scaled-up canvas isn't blurry
 // ============================================================
 
 const W = 480, H = 720;
@@ -469,7 +470,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v32.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v33.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -1922,12 +1923,28 @@ class GameOverScene extends Phaser.Scene {
 // ════════════════════════════════════════════════════════════
 //  BOOT
 // ════════════════════════════════════════════════════════════
+
+// HiDPI text fix — Phaser canvas is 480×720 but the browser scales it up to fill
+// available space (Scale.FIT), which bitmap-upscales every Text texture and produces
+// blurry serif glyphs. Patch the text factory so every `this.add.text(...)` call
+// renders its off-screen canvas at the device pixel ratio (or at least 2x), then
+// scales DOWN to display size. Net result: crisp text at any browser zoom.
+(() => {
+  const dpr = Math.max(2, window.devicePixelRatio || 1);
+  const factoryProto = Phaser.GameObjects.GameObjectFactory.prototype;
+  const _origText = factoryProto.text;
+  factoryProto.text = function(...args) {
+    return _origText.apply(this, args).setResolution(dpr);
+  };
+})();
+
 new Phaser.Game({
   type: Phaser.AUTO, width: W, height: H, backgroundColor: '#0a0806',
   parent: document.body,
   scene: [TitleScene, ClassSelectScene, GameScene, LevelUpScene, GameOverScene],
   physics: { default: 'arcade' },
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  render: { roundPixels: true, antialias: true },
   input: { keyboard: true }
 });
 </script>

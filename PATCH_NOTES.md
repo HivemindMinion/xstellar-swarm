@@ -6,6 +6,15 @@ The latest version is always at the top.
 
 ---
 
+## v33 — HiDPI text (no more blur on big screens)
+
+### Fixed
+- **Text was blurry when the browser scaled up the 480×720 game canvas.** Phaser renders Text into an off-screen canvas at the requested font size, uploads as a texture, and then `Scale.FIT` mode bitmap-upscales the entire canvas to fill the window — including the text texture, which softens serif glyphs. Particularly bad on high-DPI displays where the screen pixel ratio is 1.5×–2× already.
+- Patched the `Phaser.GameObjects.GameObjectFactory.prototype.text` factory at boot so every `this.add.text(...)` call automatically calls `setResolution(max(2, devicePixelRatio))`. The off-screen text canvas now renders at 2×–3× density, then scales DOWN to display — crisp at any browser zoom level.
+- Added `render: { roundPixels: true, antialias: true }` to the game config to snap text to integer pixel boundaries and avoid sub-pixel sampling blur.
+
+---
+
 ## v32 — HUD readout for crit chance and cooldown reduction
 
 ### Added
