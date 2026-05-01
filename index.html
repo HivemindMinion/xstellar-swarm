@@ -47,6 +47,7 @@
 //  v31: ambient music — slow ominous drone via Tone.js
 //  v32: HUD readout for crit chance + cooldown reduction
 //  v33: HiDPI text — setResolution(dpr) so scaled-up canvas isn't blurry
+//  v34: drop the crit-kill camera flash — strobed during high-pierce combat
 // ============================================================
 
 const W = 480, H = 720;
@@ -470,7 +471,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v33.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v34.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -1451,9 +1452,11 @@ class GameScene extends Phaser.Scene {
             e.alive=false; this.spawnParticle(e.x,e.y,e.color,12); this.spawnParticle(e.x,e.y,0x44aa22,6);
             e.gfx.clear(); this.kills++; this.enemiesRemaining--;
             SFX.kill();
-            // Crit kills: jump combo by 2 + brief slow-mo flash for impact
+            // Crit kills jump combo by 2 + brief slow-mo (no full-screen flash —
+            // at high pierce/PER this strobed several times a second). The
+            // particle burst + gold damage number + hit-stop + crit SFX still
+            // make the moment land without eye-straining the player.
             if (isCrit) {
-              this.cameras.main.flash(60, 255, 230, 110, false);
               this.hitStop = Math.max(this.hitStop, 70);
             }
             // Boss death: bigger sensory payoff regardless of crit

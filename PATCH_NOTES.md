@@ -6,6 +6,17 @@ The latest version is always at the top.
 
 ---
 
+## v34 — Drop the crit-kill camera flash (eye-strain fix)
+
+### Removed
+- The 60ms gold full-screen flash that fired on every crit-kill (added in v9). At high Perception + Pierce III, a single Volley could trigger 3–5 crit-kills per second, and the flash strobed the entire screen at that rate — uncomfortable to look at.
+
+### Changed
+- The hit-stop slow-mo (70ms at 8% time) is preserved on crit-kills. Combined with the existing yellow particle burst, white spark, gold damage number, and crit SFX bell two-note, the moment still lands clearly without ever flashing the whole screen.
+- Boss-kill flash kept — it fires only once per ~5 waves (when a Queen/Tyrant/Architect dies), so it's a genuine victory moment rather than a strobe. Same with the Screamer-scream camera shake (rare, intentional jolt).
+
+---
+
 ## v33 — HiDPI text (no more blur on big screens)
 
 ### Fixed
