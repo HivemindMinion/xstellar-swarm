@@ -6,6 +6,15 @@ The latest version is always at the top.
 
 ---
 
+## v35 — Mute toggle (M)
+
+### Added
+- **M** key toggles `Tone.Destination.mute`, silencing all SFX and the v31 ambient drone in one shot. Brief "Sound: ON" / "Sound: OFF" text flashes at the top of the play area as feedback (fades over 1.1s).
+- Title screen control hint extended to advertise the keybind: `Left Click: Attack ◆ Right Click: Special / WASD / Arrows: Move ◆ Tab: Swap Special / P / Esc: Pause ◆ M: Mute`.
+- No-op (with no error) when Tone.js failed to load or audio hasn't been initialised yet.
+
+---
+
 ## v34 — Drop the crit-kill camera flash (eye-strain fix)
 
 ### Removed

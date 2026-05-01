@@ -48,6 +48,7 @@
 //  v32: HUD readout for crit chance + cooldown reduction
 //  v33: HiDPI text — setResolution(dpr) so scaled-up canvas isn't blurry
 //  v34: drop the crit-kill camera flash — strobed during high-pierce combat
+//  v35: M to mute / unmute (SFX + music)
 // ============================================================
 
 const W = 480, H = 720;
@@ -444,7 +445,7 @@ class TitleScene extends Phaser.Scene {
     dec.moveTo(W/2-40,260); dec.lineTo(W/2+40,290); dec.moveTo(W/2+40,260); dec.lineTo(W/2-40,290); dec.strokePath();
     dec.fillStyle(PAL.gold,0.6); dec.fillCircle(W/2,275,4);
 
-    this.add.text(W/2,310,'Left Click: Attack  ◆  Right Click: Special\nWASD / Arrows: Move  ◆  Tab: Swap Special  ◆  P / Esc: Pause',{
+    this.add.text(W/2,310,'Left Click: Attack  ◆  Right Click: Special\nWASD / Arrows: Move  ◆  Tab: Swap Special\nP / Esc: Pause  ◆  M: Mute',{
       fontSize:'10px',fontFamily:'serif',color:'#5a5040',fontStyle:'italic',align:'center'
     }).setOrigin(0.5);
 
@@ -471,7 +472,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v34.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v35.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -601,6 +602,8 @@ class GameScene extends Phaser.Scene {
     // Pause toggle: P or Esc. Holds the entire update() loop so enemies / bullets / pools all freeze.
     this.input.keyboard.on('keydown-P', () => this.togglePause());
     this.input.keyboard.on('keydown-ESC', () => this.togglePause());
+    // M to mute / unmute everything (SFX synths + ambient drone all share Tone.Destination)
+    this.input.keyboard.on('keydown-M', () => this.toggleMute());
 
     this.time.delayedCall(1200, () => this.startWave());
   }
@@ -616,6 +619,16 @@ class GameScene extends Phaser.Scene {
       this._pauseObjs.forEach(o => o.destroy());
       this._pauseObjs = null;
     }
+  }
+
+  toggleMute() {
+    if (typeof Tone === 'undefined' || !SFX.ready) return;
+    Tone.Destination.mute = !Tone.Destination.mute;
+    const txt = this.add.text(W/2, 100, Tone.Destination.mute ? 'Sound: OFF' : 'Sound: ON', {
+      fontSize: '18px', fontFamily: 'serif', color: PAL.accent, fontStyle: 'italic',
+      stroke: '#1a1408', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(105);
+    this.tweens.add({ targets: txt, alpha: 0, duration: 500, delay: 600, onComplete: () => txt.destroy() });
   }
 
   cycleSpecial() {
