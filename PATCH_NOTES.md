@@ -6,6 +6,15 @@ The latest version is always at the top.
 
 ---
 
+## v32 — HUD readout for crit chance and cooldown reduction
+
+### Added
+- New tiny stat readout under the kill counter / stat-points line: `Crit X%  ◆  CDR X%`. Updates every time `updateHUD()` runs.
+- Exposes both effects of the v7+v16 Perception stat so allocating points feels purposeful: investing PER produces a visible number bump in real time, and players can see how close they are to the 50% crit cap and 30% CDR cap.
+- Rendered in dim italic (`#7a6a4a`, 9px) so it sits under the existing HUD without competing with the bright kill counter or the gold "points pending" line.
+
+---
+
 ## v31 — Ambient music drone
 
 ### Added

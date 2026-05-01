@@ -45,6 +45,7 @@
 //  v29: red damage numbers when the player takes a hit
 //  v30: pause menu — P or Esc to pause / resume the run
 //  v31: ambient music — slow ominous drone via Tone.js
+//  v32: HUD readout for crit chance + cooldown reduction
 // ============================================================
 
 const W = 480, H = 720;
@@ -468,7 +469,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v31.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v32.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -697,6 +698,8 @@ class GameScene extends Phaser.Scene {
 
     this.killText = this.add.text(15,8,'',{fontSize:'11px',fontFamily:'serif',color:PAL.textDim}).setDepth(50);
     this.statPtsText = this.add.text(15,24,'',{fontSize:'11px',fontFamily:'serif',color:'#d4a017',fontStyle:'italic'}).setDepth(50);
+    // Derived-stat readout — exposes crit% and cooldown reduction so PER allocation is legible
+    this.derivedText = this.add.text(15,40,'',{fontSize:'9px',fontFamily:'serif',color:'#7a6a4a',fontStyle:'italic'}).setDepth(50);
     this.comboText = this.add.text(W/2,50,'',{fontSize:'16px',fontFamily:'serif',color:PAL.accent,fontStyle:'italic'}).setOrigin(0.5).setDepth(50).setAlpha(0);
 
     // Special ability indicator
@@ -722,6 +725,11 @@ class GameScene extends Phaser.Scene {
 
     if (PLAYER.statPoints > 0) this.statPtsText.setText(`◆ ${PLAYER.statPoints} point${PLAYER.statPoints>1?'s':''} pending`);
     else this.statPtsText.setText('');
+
+    // Derived-stat readout — keeps PER's two effects visible to the player
+    const critPct = Math.round(getCritChance() * 100);
+    const cdRedPct = Math.round((1 - getCooldownMult()) * 100);
+    this.derivedText.setText(`Crit ${critPct}%  ◆  CDR ${cdRedPct}%`);
 
     // Special indicator
     if (PLAYER.activeSpecial) {
