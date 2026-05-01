@@ -6,6 +6,18 @@ The latest version is always at the top.
 
 ---
 
+## v36 — Wave-clear flash between waves
+
+### Added
+- Brief celebratory text appears in the upper play area when a wave's last enemy dies: `Wave N Cleared` for normal waves, `★  Boss Slain  ★` (gold) for waves where a Queen / Tyrant / Architect was the closer. Visible for ~350ms then fades over 300ms.
+- Tracked on the existing `waveAnnouncements` array so a fast next-wave never leaves a stale "Cleared" text underlapping the new wave's banner.
+
+### Changed
+- Inter-wave gap extended from 150ms → 800ms to give the wave-clear text room to breathe. With the existing 250ms post-`startWave` spawn delay, the next enemy isn't hittable for ~1050ms after the kill — still well inside the 2s combo timer, so combo carry between waves is preserved.
+- Loop now has rhythm: kill → flash → next wave incoming. Previously the last-enemy kill instantly led into the next wave's spawn-in.
+
+---
+
 ## v35 — Mute toggle (M)
 
 ### Added

@@ -49,6 +49,7 @@
 //  v33: HiDPI text — setResolution(dpr) so scaled-up canvas isn't blurry
 //  v34: drop the crit-kill camera flash — strobed during high-pierce combat
 //  v35: M to mute / unmute (SFX + music)
+//  v36: wave-clear flash — short "Wave N Cleared" beat between waves
 // ============================================================
 
 const W = 480, H = 720;
@@ -472,7 +473,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v35.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v36.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 
@@ -1773,7 +1774,21 @@ class GameScene extends Phaser.Scene {
       this.enemyBullets.clear(true, true);
       this.novaEffects.forEach(n => { if (n && n.gfx) n.gfx.destroy(); });
       this.novaEffects = [];
-      this.time.delayedCall(150, () => this.startWave());
+
+      // Wave-clear flash — small celebratory beat before the next wave's spawn.
+      // 800ms total gap before the new wave's startWave fires; with the 250ms post-startWave
+      // spawn delay = ~1050ms before the next enemy is hittable, well inside the 2s combo window.
+      const isBossClear = this.wave % 5 === 0;
+      const clearText = isBossClear ? `★  Boss Slain  ★` : `Wave ${this.wave} Cleared`;
+      const clearColor = isBossClear ? '#ffe066' : PAL.accent;
+      const cleared = this.add.text(W/2, 95, clearText, {
+        fontSize: '20px', fontFamily: 'serif', color: clearColor, fontStyle: 'italic',
+        stroke: '#1a1408', strokeThickness: 2
+      }).setOrigin(0.5).setDepth(105);
+      this.waveAnnouncements.push(cleared);
+      this.tweens.add({ targets: cleared, alpha: 0, duration: 300, delay: 350, onComplete: () => cleared.destroy() });
+
+      this.time.delayedCall(800, () => this.startWave());
     }
   }
 }
