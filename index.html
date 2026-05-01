@@ -44,6 +44,7 @@
 //  v28: announcement timing — clear text faster, less overlap with gameplay
 //  v29: red damage numbers when the player takes a hit
 //  v30: pause menu — P or Esc to pause / resume the run
+//  v31: ambient music — slow ominous drone via Tone.js
 // ============================================================
 
 const W = 480, H = 720;
@@ -221,6 +222,21 @@ const SFX = {
       this.drumSynth = new Tone.MembraneSynth({ pitchDecay: 0.08, octaves: 4 }).toDestination(); this.drumSynth.volume.value = -10;
       this.bellSynth = new Tone.FMSynth({ harmonicity: 5, modulationIndex: 3, envelope: { attack: 0.001, decay: 0.4, sustain: 0, release: 0.2 } }).toDestination(); this.bellSynth.volume.value = -14;
       this.gongSynth = new Tone.FMSynth({ harmonicity: 1.5, modulationIndex: 8, envelope: { attack: 0.005, decay: 1.0, sustain: 0.05, release: 0.8 } }).toDestination(); this.gongSynth.volume.value = -10;
+      // Ambient music — slow ominous drone. Sub-mix volume well below SFX so combat stays foreground.
+      this.dronePad = new Tone.AMSynth({ harmonicity: 1.5, envelope: { attack: 1.4, decay: 0.8, sustain: 0.45, release: 2.5 } }).toDestination();
+      this.dronePad.volume.value = -28;
+      this.droneStep = 0;
+      this.droneNotes = ['C2', 'F2', 'D#2', 'G2', 'F2', 'C2', 'A#1', 'D#2'];
+      if (!this.droneInterval) {
+        this.droneInterval = setInterval(() => {
+          if (!this.ready || !this.dronePad) return;
+          try {
+            const note = this.droneNotes[this.droneStep % this.droneNotes.length];
+            this.dronePad.triggerAttackRelease(note, '2n');
+            this.droneStep++;
+          } catch {}
+        }, 4500);
+      }
       this.ready = true;
     } catch (e) { console.warn('SFX init failed (silent fallback):', e); }
   },
@@ -452,7 +468,7 @@ class TitleScene extends Phaser.Scene {
       this.input.keyboard.on('keydown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
       this.input.on('pointerdown',()=>{ SFX.init(); this.scene.start('ClassSelectScene'); });
     }
-    this.add.text(W/2,H-30,'v30.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
+    this.add.text(W/2,H-30,'v31.0',{fontSize:'10px',fontFamily:'serif',color:'#3a3020'}).setOrigin(0.5);
   }
 }
 

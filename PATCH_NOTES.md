@@ -6,6 +6,15 @@ The latest version is always at the top.
 
 ---
 
+## v31 — Ambient music drone
+
+### Added
+- A slow ominous bass drone via Tone.js `AMSynth`, layered behind the existing v12 procedural SFX. Plays an 8-step minor sequence (C2 → F2 → D#2 → G2 → F2 → C2 → A#1 → D#2) on a 4.5-second interval, with each note attack/decay shaped to swell rather than punch — so it sits well under hit/crit/kill SFX without competing for attention.
+- Sub-mixed at -28 dB (vs SFX at -10 to -22 dB) so combat audio stays foreground; the drone is felt more than heard, like a heartbeat for the harvest.
+- Lazy-init alongside the existing SFX init (first user gesture, browser audio policy). Silent fallback if Tone.js fails to load.
+
+---
+
 ## v30 — Pause menu (P / Esc)
 
 ### Added
